@@ -1,17 +1,16 @@
 """
-VCF Parser for PharmaGuard v1.0
-Parses Variant Call Format files and extracts pharmacogenomic variants
+VCF Parser for PharmaGuard v4.0
+Parses Variant Call Format files and extracts pharmacogenomic variants.
+Unchanged from v1 — logic is solid.
 """
 
 import re
 from typing import Dict, List, Optional
 
-# Target genes for pharmacogenomics analysis
 TARGET_GENES = {"CYP2D6", "CYP2C19", "CYP2C9", "SLCO1B1", "TPMT", "DPYD"}
 
 
 def parse_info_field(info_str: str) -> Dict[str, str]:
-    """Parse the INFO field of a VCF record into a dictionary."""
     info_dict = {}
     for item in info_str.split(";"):
         if "=" in item:
@@ -23,167 +22,105 @@ def parse_info_field(info_str: str) -> Dict[str, str]:
 
 
 def parse_vcf(file_content: str) -> Dict:
-    """
-    Parse VCF file content and extract pharmacogenomic variants.
-    
-    Returns:
-        dict with keys: variants, metadata, detected_genes, parse_errors
-    """
     lines = file_content.strip().split("\n")
-    
-    metadata = {}
-    variants = []
-    parse_errors = []
-    header_cols = []
-    
+    metadata, variants, parse_errors, header_cols = {}, [], [], []
+
     for line_num, line in enumerate(lines, 1):
         line = line.strip()
-        
         if not line:
             continue
-            
-        # Parse metadata lines
         if line.startswith("##"):
             if "=" in line:
                 key = line[2:line.index("=")]
                 val = line[line.index("=") + 1:]
                 metadata[key] = val
             continue
-        
-        # Parse header line
         if line.startswith("#CHROM"):
             header_cols = line[1:].split("\t")
             continue
-        
-        # Parse variant lines
         try:
             parts = line.split("\t")
             if len(parts) < 8:
-                # Try space-separated
                 parts = line.split()
-            
             if len(parts) < 8:
                 parse_errors.append(f"Line {line_num}: insufficient columns")
                 continue
-            
-            chrom = parts[0]
-            pos = parts[1]
-            rsid = parts[2] if parts[2] != "." else None
-            ref = parts[3]
-            alt = parts[4]
-            qual = parts[5]
-            filter_val = parts[6]
-            info_str = parts[7]
-            
-            # Parse INFO field
+
+            chrom, pos, rsid_raw, ref, alt, qual, filter_val, info_str = (
+                parts[0], parts[1], parts[2], parts[3],
+                parts[4], parts[5], parts[6], parts[7],
+            )
+            rsid = rsid_raw if rsid_raw != "." else None
             info = parse_info_field(info_str)
-            
-            # Extract gene info
-            gene = info.get("GENE", info.get("gene", None))
+
+            gene        = info.get("GENE", info.get("gene", None))
             star_allele = info.get("STAR", info.get("star", None))
-            # Ensure star allele always has * prefix
             if star_allele and not star_allele.startswith("*"):
                 star_allele = f"*{star_allele}"
-            
-            # Try to infer gene from rsID if not in INFO
+
             if not gene and rsid:
                 gene = infer_gene_from_rsid(rsid)
-            
-            # Only keep target gene variants
+
             if gene and gene.upper() in TARGET_GENES:
-                variant = {
-                    "chrom": chrom,
-                    "pos": pos,
-                    "rsid": rsid or f"chr{chrom}:{pos}",
-                    "ref": ref,
-                    "alt": alt,
-                    "gene": gene.upper(),
-                    "star_allele": star_allele,
-                    "quality": qual,
-                    "filter": filter_val,
-                    "info": info,
+                variants.append({
+                    "chrom":           chrom,
+                    "pos":             pos,
+                    "rsid":            rsid or f"chr{chrom}:{pos}",
+                    "ref":             ref,
+                    "alt":             alt,
+                    "gene":            gene.upper(),
+                    "star_allele":     star_allele,
+                    "quality":         qual,
+                    "filter":          filter_val,
+                    "info":            info,
                     "functional_status": info.get("FUNCTION", info.get("function", "Unknown")),
-                }
-                variants.append(variant)
-        
+                })
         except Exception as e:
             parse_errors.append(f"Line {line_num}: {str(e)}")
-    
-    detected_genes = list(set(v["gene"] for v in variants))
-    
-    # Group variants by gene
+
+    detected_genes   = list(set(v["gene"] for v in variants))
     variants_by_gene = {}
     for v in variants:
-        gene = v["gene"]
-        if gene not in variants_by_gene:
-            variants_by_gene[gene] = []
-        variants_by_gene[gene].append(v)
-    
+        variants_by_gene.setdefault(v["gene"], []).append(v)
+
     return {
-        "variants": variants,
-        "variants_by_gene": variants_by_gene,
-        "metadata": metadata,
-        "detected_genes": detected_genes,
-        "parse_errors": parse_errors,
-        "total_variants": len(variants),
+        "variants":          variants,
+        "variants_by_gene":  variants_by_gene,
+        "metadata":          metadata,
+        "detected_genes":    detected_genes,
+        "parse_errors":      parse_errors,
+        "total_variants":    len(variants),
         "vcf_parsing_success": len(parse_errors) == 0 or len(variants) > 0,
     }
 
 
 def infer_gene_from_rsid(rsid: str) -> Optional[str]:
-    """Infer gene from known rsIDs for pharmacogenomic variants."""
-    # Common pharmacogenomic rsID to gene mappings
     rsid_gene_map = {
-        # CYP2D6
-        "rs3892097": "CYP2D6",
-        "rs5030655": "CYP2D6",
-        "rs35742686": "CYP2D6",
-        "rs1065852": "CYP2D6",
-        "rs28371725": "CYP2D6",
-        "rs16947": "CYP2D6",
-        # CYP2C19
-        "rs4244285": "CYP2C19",
-        "rs4986893": "CYP2C19",
-        "rs28399504": "CYP2C19",
-        "rs56337013": "CYP2C19",
-        "rs12248560": "CYP2C19",
-        # CYP2C9
-        "rs1799853": "CYP2C9",
-        "rs1057910": "CYP2C9",
-        "rs28371686": "CYP2C9",
+        "rs3892097": "CYP2D6",  "rs5030655": "CYP2D6",  "rs35742686": "CYP2D6",
+        "rs1065852": "CYP2D6",  "rs28371725": "CYP2D6", "rs16947": "CYP2D6",
+        "rs4244285": "CYP2C19", "rs4986893": "CYP2C19", "rs28399504": "CYP2C19",
+        "rs56337013": "CYP2C19","rs12248560": "CYP2C19",
+        "rs1799853": "CYP2C9",  "rs1057910": "CYP2C9",  "rs28371686": "CYP2C9",
         "rs9332131": "CYP2C9",
-        # SLCO1B1
-        "rs4149056": "SLCO1B1",
-        "rs2306283": "SLCO1B1",
-        "rs11045819": "SLCO1B1",
-        # TPMT
-        "rs1800460": "TPMT",
-        "rs1142345": "TPMT",
-        "rs1800462": "TPMT",
+        "rs4149056": "SLCO1B1", "rs2306283": "SLCO1B1", "rs11045819": "SLCO1B1",
+        "rs1800460": "TPMT",    "rs1142345": "TPMT",    "rs1800462": "TPMT",
         "rs1800584": "TPMT",
-        # DPYD
-        "rs3918290": "DPYD",
-        "rs55886062": "DPYD",
-        "rs67376798": "DPYD",
+        "rs3918290": "DPYD",    "rs55886062": "DPYD",   "rs67376798": "DPYD",
         "rs75017182": "DPYD",
     }
     return rsid_gene_map.get(rsid)
 
 
 def determine_diplotype(variants_for_gene: List[Dict]) -> str:
-    """Determine diplotype from variants for a given gene."""
     star_alleles = [v["star_allele"] for v in variants_for_gene if v.get("star_allele")]
-    
     if len(star_alleles) >= 2:
         return f"{star_alleles[0]}/{star_alleles[1]}"
     elif len(star_alleles) == 1:
         return f"{star_alleles[0]}/*1"
-    else:
-        return "*1/*1"  # Assume normal if no variants detected
+    return "*1/*1"
 
 
 def get_sample_vcf() -> str:
-    """Return a sample VCF file for testing."""
     return """##fileformat=VCFv4.2
 ##fileDate=20240101
 ##source=PharmaGuardTest

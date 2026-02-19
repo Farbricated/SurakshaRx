@@ -1,6 +1,14 @@
 """
 PharmaGuard — Pharmacogenomic Risk Prediction System
-RIFT 2026 Hackathon | Modern Minimal Redesign
+RIFT 2026 Hackathon | v4.0
+Changes from v2:
+  - LLM retry + fallback to llama-3.1-8b-instant + static template safety net
+  - explanation_generated always True
+  - alternative_drugs populated for all phenotypes (incl. CODEINE IM)
+  - monitoring_required is now drug+phenotype specific (no more contradictions)
+  - contraindicated logic corrected
+  - genes_analyzed is drug-specific (primary gene first)
+  - model_used shown in AI explanation header
 """
 
 import streamlit as st
@@ -17,11 +25,11 @@ from schema import build_output_schema
 from drug_interactions import run_interaction_analysis
 from pdf_report import generate_pdf_report
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 ALL_DRUGS = list(DRUG_RISK_TABLE.keys())
 GENE_DRUG_MAP = {
     "CODEINE": "CYP2D6", "WARFARIN": "CYP2C9", "CLOPIDOGREL": "CYP2C19",
-    "SIMVASTATIN": "SLCO1B1", "AZATHIOPRINE": "TPMT", "FLUOROURACIL": "DPYD"
+    "SIMVASTATIN": "SLCO1B1", "AZATHIOPRINE": "TPMT", "FLUOROURACIL": "DPYD",
 }
 SEV_RANK = {"none": 0, "low": 1, "moderate": 2, "high": 3, "critical": 4}
 
@@ -33,602 +41,119 @@ RISK_CONFIG = {
     "Unknown":       {"dot": "#94a3b8", "text": "#64748b", "bg": "#f8fafc", "border": "#e2e8f0", "label": "Unknown"},
 }
 
-st.set_page_config(
-    page_title="PharmaGuard",
-    page_icon="⬡",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="PharmaGuard", page_icon="⬡", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=Geist:wght@300;400;500;600;700&display=swap');
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body, [class*="css"] {
-    font-family: 'Geist', -apple-system, sans-serif !important;
-    background: #0a0a0a !important;
-    color: #f0f0f0 !important;
-    font-size: 16px !important;
-}
+html, body, [class*="css"] { font-family: 'Geist', -apple-system, sans-serif !important; background: #0a0a0a !important; color: #f0f0f0 !important; font-size: 16px !important; }
 .stApp { background: #0a0a0a !important; }
-.main .block-container {
-    padding: 0 3rem 6rem !important;
-    max-width: 1120px !important;
-}
+.main .block-container { padding: 0 3rem 6rem !important; max-width: 1120px !important; }
 #MainMenu, footer, header { visibility: hidden; }
-
-/* ── WORDMARK ── */
-.pg-nav {
-    padding: 2rem 0 2.5rem;
-    display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid #2a2a2a;
-    margin-bottom: 3rem;
-}
-.pg-wordmark {
-    font-family: 'Instrument Serif', serif;
-    font-size: 1.75rem;
-    color: #f0f0f0;
-    letter-spacing: -0.02em;
-}
+.pg-nav { padding: 2rem 0 2.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; margin-bottom: 3rem; }
+.pg-wordmark { font-family: 'Instrument Serif', serif; font-size: 1.75rem; color: #f0f0f0; letter-spacing: -0.02em; }
 .pg-wordmark em { font-style: italic; color: #6b7280; }
-.pg-pill {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #6b7280;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    padding: 5px 12px;
-    border-radius: 100px;
-}
-
-/* ── SECTION LABEL ── */
-.section-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #6b7280;
-    margin-bottom: 0.75rem;
-}
-
-/* ── PANEL ── */
-.panel {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-}
-
-/* ── STAT ROW ── */
-.stat-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1px;
-    background: #1e1e1e;
-    border: 1px solid #1e1e1e;
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 1.5rem;
-}
-.stat-cell {
-    background: #141414;
-    padding: 1.35rem 1.5rem;
-}
-.stat-val {
-    font-family: 'Instrument Serif', serif;
-    font-size: 2.25rem;
-    color: #f0f0f0;
-    line-height: 1;
-    margin-bottom: 0.3rem;
-}
-.stat-key {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.67rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #525252;
-}
-.stat-sub {
-    font-size: 0.8rem;
-    color: #4b4b4b;
-    margin-top: 0.25rem;
-}
-
-/* ── RISK CARD ── */
-.rcard {
-    border: 1px solid #222;
-    border-radius: 12px;
-    background: #111;
-    margin-bottom: 1rem;
-    overflow: hidden;
-}
-.rcard-top {
-    padding: 1.35rem 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid #1e1e1e;
-}
+.pg-pill { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 5px 12px; border-radius: 100px; }
+.section-label { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7280; margin-bottom: 0.75rem; }
+.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: #1e1e1e; border: 1px solid #1e1e1e; border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; }
+.stat-cell { background: #141414; padding: 1.35rem 1.5rem; }
+.stat-val { font-family: 'Instrument Serif', serif; font-size: 2.25rem; color: #f0f0f0; line-height: 1; margin-bottom: 0.3rem; }
+.stat-key { font-family: 'DM Mono', monospace; font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; color: #525252; }
+.stat-sub { font-size: 0.8rem; color: #4b4b4b; margin-top: 0.25rem; }
+.rcard { border: 1px solid #222; border-radius: 12px; background: #111; margin-bottom: 1rem; overflow: hidden; }
+.rcard-top { padding: 1.35rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e1e1e; }
 .rcard-left { display: flex; align-items: center; gap: 0.875rem; }
 .rcard-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
-.rcard-name {
-    font-family: 'Geist', sans-serif;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #f0f0f0;
-    letter-spacing: -0.01em;
-}
-.rcard-meta {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    color: #4b4b4b;
-    margin-top: 3px;
-    letter-spacing: 0.04em;
-}
-.rcard-badge {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 5px 14px;
-    border-radius: 100px;
-    border: 1px solid;
-}
+.rcard-name { font-family: 'Geist', sans-serif; font-size: 1.1rem; font-weight: 600; color: #f0f0f0; letter-spacing: -0.01em; }
+.rcard-meta { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #4b4b4b; margin-top: 3px; letter-spacing: 0.04em; }
+.rcard-badge { font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 14px; border-radius: 100px; border: 1px solid; }
 .rcard-body { padding: 1.35rem 1.5rem; }
-
-/* ── METRICS ── */
-.mc-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1px;
-    background: #1a1a1a;
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 1.35rem;
-}
-.mc-cell {
-    background: #0e0e0e;
-    padding: 1rem 1.1rem;
-}
-.mc-key {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.63rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #484848;
-    margin-bottom: 0.35rem;
-}
-.mc-val {
-    font-family: 'Geist', sans-serif;
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #e8e8e8;
-}
-
-/* ── CONFIDENCE BAR ── */
+.mc-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #1a1a1a; border-radius: 8px; overflow: hidden; margin-bottom: 1.35rem; }
+.mc-cell { background: #0e0e0e; padding: 1rem 1.1rem; }
+.mc-key { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase; color: #484848; margin-bottom: 0.35rem; }
+.mc-val { font-family: 'Geist', sans-serif; font-size: 1.05rem; font-weight: 600; color: #e8e8e8; }
 .conf-wrap { margin-bottom: 1.35rem; }
-.conf-header {
-    display: flex;
-    justify-content: space-between;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
-    color: #484848;
-    margin-bottom: 7px;
-}
-.conf-track {
-    height: 3px;
-    background: #1e1e1e;
-    border-radius: 2px;
-    overflow: hidden;
-}
+.conf-header { display: flex; justify-content: space-between; font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em; color: #484848; margin-bottom: 7px; }
+.conf-track { height: 3px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
 .conf-fill { height: 100%; border-radius: 2px; }
-
-/* ── DIVIDER ── */
-.h-rule {
-    border: none;
-    border-top: 1px solid #1e1e1e;
-    margin: 1.35rem 0;
-}
-.inline-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #484848;
-    margin-bottom: 0.65rem;
-}
-
-/* ── VARIANT TABLE ── */
+.h-rule { border: none; border-top: 1px solid #1e1e1e; margin: 1.35rem 0; }
+.inline-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #484848; margin-bottom: 0.65rem; }
 .vtable { width: 100%; border-collapse: collapse; }
-.vtable th {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: #484848;
-    padding: 0 0.6rem 0.6rem;
-    text-align: left;
-    border-bottom: 1px solid #1e1e1e;
-}
-.vtable td {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.8rem;
-    color: #a0a0a0;
-    padding: 0.6rem 0.6rem;
-    border-bottom: 1px solid #1a1a1a;
-}
+.vtable th { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; padding: 0 0.6rem 0.6rem; text-align: left; border-bottom: 1px solid #1e1e1e; }
+.vtable td { font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #a0a0a0; padding: 0.6rem 0.6rem; border-bottom: 1px solid #1a1a1a; }
 .vtable tbody tr:last-child td { border-bottom: none; }
-.v-rsid { color: #2563eb !important; }
-.v-star { color: #7c3aed !important; }
-.v-nofunc { color: #dc2626 !important; }
-.v-dec { color: #d97706 !important; }
-.v-inc { color: #2563eb !important; }
-.v-norm { color: #16a34a !important; }
-
-/* ── REC BOX ── */
-.rec-box {
-    border-radius: 8px;
-    border: 1px solid;
-    padding: 1.1rem 1.25rem;
-    margin-bottom: 1rem;
-}
-.rec-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    margin-bottom: 0.45rem;
-}
-.rec-text {
-    font-size: 0.975rem;
-    line-height: 1.75;
-    color: #b0b0b0;
-}
-
-/* ── ALT DRUGS ── */
+.v-rsid { color: #2563eb !important; } .v-star { color: #7c3aed !important; }
+.v-nofunc { color: #dc2626 !important; } .v-dec { color: #d97706 !important; }
+.v-inc { color: #2563eb !important; } .v-norm { color: #16a34a !important; }
+.rec-box { border-radius: 8px; border: 1px solid; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+.rec-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.45rem; }
+.rec-text { font-size: 0.975rem; line-height: 1.75; color: #b0b0b0; }
 .alt-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-.alt-chip {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
-    color: #a0a0a0;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 100px;
-    padding: 4px 12px;
-}
-
-/* ── AI BLOCK ── */
-.ai-block {
-    border: 1px solid #222;
-    border-radius: 8px;
-    overflow: hidden;
-    margin-top: 1.35rem;
-}
-.ai-header {
-    padding: 0.7rem 1.1rem;
-    background: #0e0e0e;
-    border-bottom: 1px solid #222;
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-}
-.ai-badge {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.63rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: #6b7280;
-    background: #1e1e1e;
-    padding: 3px 9px;
-    border-radius: 4px;
-}
+.alt-chip { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #a0a0a0; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 100px; padding: 4px 12px; }
+.ai-block { border: 1px solid #222; border-radius: 8px; overflow: hidden; margin-top: 1.35rem; }
+.ai-header { padding: 0.7rem 1.1rem; background: #0e0e0e; border-bottom: 1px solid #222; display: flex; align-items: center; gap: 0.65rem; }
+.ai-badge { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: #6b7280; background: #1e1e1e; padding: 3px 9px; border-radius: 4px; }
+.ai-badge-static { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: #9ca3af; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 3px 9px; border-radius: 4px; }
 .ai-section { padding: 1rem 1.1rem; border-bottom: 1px solid #1e1e1e; }
 .ai-section:last-child { border-bottom: none; }
-.ai-section-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: #484848;
-    margin-bottom: 0.45rem;
-}
+.ai-section-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; margin-bottom: 0.45rem; }
 .ai-section-text { font-size: 0.975rem; line-height: 1.8; color: #b0b0b0; }
-
-/* ── ALERT ── */
-.alert {
-    border-radius: 8px;
-    border: 1px solid;
-    border-left-width: 3px;
-    padding: 1rem 1.1rem;
-    margin-bottom: 1rem;
-    display: flex;
-    gap: 0.85rem;
-    align-items: flex-start;
-}
-.alert-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    margin-bottom: 0.3rem;
-}
+.alert { border-radius: 8px; border: 1px solid; border-left-width: 3px; padding: 1rem 1.1rem; margin-bottom: 1rem; display: flex; gap: 0.85rem; align-items: flex-start; }
+.alert-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.3rem; }
 .alert-text { font-size: 0.95rem; line-height: 1.7; }
-
-/* ── INTERACTION ── */
-.ix-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.875rem;
-    padding: 1.1rem;
-    border: 1px solid #1e1e1e;
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-    background: #111;
-}
+.ix-row { display: flex; align-items: flex-start; gap: 0.875rem; padding: 1.1rem; border: 1px solid #1e1e1e; border-radius: 8px; margin-bottom: 0.5rem; background: #111; }
 .ix-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
 .ix-title { font-size: 0.975rem; font-weight: 600; color: #e8e8e8; margin-bottom: 0.3rem; }
 .ix-msg { font-size: 0.9rem; color: #525252; line-height: 1.65; margin-bottom: 0.45rem; }
 .ix-rec { font-size: 0.875rem; color: #8a8a8a; line-height: 1.6; }
-.ix-sev {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 4px;
-    margin-left: auto;
-    flex-shrink: 0;
-    align-self: flex-start;
-}
-
-/* ── EMPTY ── */
-.empty {
-    text-align: center;
-    padding: 5rem 2rem;
-    border: 1px dashed #222;
-    border-radius: 12px;
-    background: #0e0e0e;
-}
-.empty-icon {
-    font-family: 'Instrument Serif', serif;
-    font-size: 2.75rem;
-    color: #d1d5db;
-    margin-bottom: 1rem;
-}
-.empty-title {
-    font-family: 'Geist', sans-serif;
-    font-size: 1.2rem;
-    font-weight: 500;
-    color: #333;
-    margin-bottom: 0.5rem;
-}
-.empty-hint {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    color: #2a2a2a;
-    letter-spacing: 0.06em;
-    line-height: 2.1;
-}
-
-/* ── TEST CARDS ── */
-.test-card {
-    background: #111;
-    border: 1px solid #1e1e1e;
-    border-radius: 10px;
-    padding: 1.2rem;
-}
+.ix-sev { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; margin-left: auto; flex-shrink: 0; align-self: flex-start; }
+.empty { text-align: center; padding: 5rem 2rem; border: 1px dashed #222; border-radius: 12px; background: #0e0e0e; }
+.empty-icon { font-family: 'Instrument Serif', serif; font-size: 2.75rem; color: #d1d5db; margin-bottom: 1rem; }
+.empty-title { font-family: 'Geist', sans-serif; font-size: 1.2rem; font-weight: 500; color: #333; margin-bottom: 0.5rem; }
+.empty-hint { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: #2a2a2a; letter-spacing: 0.06em; line-height: 2.1; }
+.test-card { background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 1.2rem; }
 .test-name { font-size: 0.95rem; font-weight: 600; color: #e0e0e0; margin-bottom: 0.4rem; }
-.test-desc {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    color: #3a3a3a;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.85rem;
-    line-height: 1.75;
-}
+.test-desc { font-family: 'DM Mono', monospace; font-size: 0.66rem; color: #3a3a3a; letter-spacing: 0.04em; margin-bottom: 0.85rem; line-height: 1.75; }
 .test-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 4px; }
-.test-drug {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    color: #3a3a3a;
-    width: 90px;
-    flex-shrink: 0;
-}
-.test-result {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    font-weight: 500;
-}
-
-/* ── RESULT TABLE ── */
-.rt-wrap {
-    border: 1px solid #1e1e1e;
-    border-radius: 10px;
-    overflow: hidden;
-    background: #0e0e0e;
-    margin-bottom: 1rem;
-}
-.rt-head {
-    display: grid;
-    grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px;
-    background: #0a0a0a;
-    border-bottom: 1px solid #1e1e1e;
-    padding: 0 0.5rem;
-}
-.rt-hcell {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: #484848;
-    padding: 0.75rem 0.85rem;
-}
-.rt-row {
-    display: grid;
-    grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px;
-    border-bottom: 1px solid #141414;
-    padding: 0 0.5rem;
-}
+.test-drug { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: #3a3a3a; width: 90px; flex-shrink: 0; }
+.test-result { font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500; }
+.rt-wrap { border: 1px solid #1e1e1e; border-radius: 10px; overflow: hidden; background: #0e0e0e; margin-bottom: 1rem; }
+.rt-head { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px; background: #0a0a0a; border-bottom: 1px solid #1e1e1e; padding: 0 0.5rem; }
+.rt-hcell { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; padding: 0.75rem 0.85rem; }
+.rt-row { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px; border-bottom: 1px solid #141414; padding: 0 0.5rem; }
 .rt-row:last-child { border-bottom: none; }
-.rt-cell {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.8rem;
-    color: #909090;
-    padding: 0.75rem 0.85rem;
-    display: flex;
-    align-items: center;
-}
-
-/* ── STEPS ── */
-.steps-row {
-    display: flex;
-    gap: 0;
-    border: 1px solid #1e1e1e;
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 2.5rem;
-    background: #0e0e0e;
-}
+.rt-cell { font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #909090; padding: 0.75rem 0.85rem; display: flex; align-items: center; }
+.steps-row { display: flex; gap: 0; border: 1px solid #1e1e1e; border-radius: 10px; overflow: hidden; margin-bottom: 2.5rem; background: #0e0e0e; }
 .step-item { flex: 1; padding: 1rem 1.35rem; border-right: 1px solid #1e1e1e; }
 .step-item:last-child { border-right: none; }
-.step-num {
-    font-family: 'DM Mono', monospace;
-    font-size: 0.63rem;
-    letter-spacing: 0.1em;
-    color: #d1d5db;
-    margin-bottom: 4px;
-    text-transform: uppercase;
-}
+.step-num { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.1em; color: #d1d5db; margin-bottom: 4px; text-transform: uppercase; }
 .step-label { font-size: 0.9rem; font-weight: 500; color: #2a2a2a; }
 .step-item.active .step-num { color: #e0e0e0; }
 .step-item.active .step-label { color: #e0e0e0; }
-
-/* ── STREAMLIT OVERRIDES ── */
-.stButton > button {
-    background: #f0f0f0 !important;
-    color: #111 !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-family: 'Geist', sans-serif !important;
-    font-weight: 500 !important;
-    font-size: 0.975rem !important;
-    padding: 0.7rem 1.75rem !important;
-    letter-spacing: -0.01em !important;
-    transition: opacity 0.15s !important;
-}
+.stButton > button { background: #f0f0f0 !important; color: #111 !important; border: none !important; border-radius: 8px !important; font-family: 'Geist', sans-serif !important; font-weight: 500 !important; font-size: 0.975rem !important; padding: 0.7rem 1.75rem !important; letter-spacing: -0.01em !important; transition: opacity 0.15s !important; }
 .stButton > button:hover { opacity: 0.8 !important; }
-.stDownloadButton > button {
-    background: #141414 !important;
-    color: #909090 !important;
-    border: 1px solid #2a2a2a !important;
-    border-radius: 8px !important;
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.75rem !important;
-    letter-spacing: 0.04em !important;
-    padding: 0.55rem 1.1rem !important;
-}
+.stDownloadButton > button { background: #141414 !important; color: #909090 !important; border: 1px solid #2a2a2a !important; border-radius: 8px !important; font-family: 'DM Mono', monospace !important; font-size: 0.75rem !important; letter-spacing: 0.04em !important; padding: 0.55rem 1.1rem !important; }
 .stDownloadButton > button:hover { border-color: #f0f0f0 !important; color: #f0f0f0 !important; }
-.stTabs [data-baseweb="tab-list"] {
-    background: transparent !important;
-    border-bottom: 1px solid #1e1e1e !important;
-    gap: 0 !important;
-    padding: 0 !important;
-    margin-bottom: 2rem !important;
-    box-shadow: none !important;
-}
-.stTabs [data-baseweb="tab"] {
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
-    color: #3a3a3a !important;
-    padding: 0.85rem 1.35rem !important;
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
-}
-.stTabs [aria-selected="true"] {
-    color: #f0f0f0 !important;
-    border-bottom-color: #f0f0f0 !important;
-    font-weight: 600 !important;
-}
+.stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1e1e1e !important; gap: 0 !important; padding: 0 !important; margin-bottom: 2rem !important; box-shadow: none !important; }
+.stTabs [data-baseweb="tab"] { font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: #3a3a3a !important; padding: 0.85rem 1.35rem !important; background: transparent !important; border: none !important; border-bottom: 2px solid transparent !important; border-radius: 0 !important; }
+.stTabs [aria-selected="true"] { color: #f0f0f0 !important; border-bottom-color: #f0f0f0 !important; font-weight: 600 !important; }
 .stTabs [data-baseweb="tab-panel"] { padding-top: 0 !important; }
-div[data-testid="stExpander"] {
-    background: #111 !important;
-    border: 1px solid #1e1e1e !important;
-    border-radius: 8px !important;
-    box-shadow: none !important;
-    margin-bottom: 0.5rem !important;
-}
-div[data-testid="stExpander"] summary {
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.07em !important;
-    color: #444 !important;
-    padding: 0.85rem 1.1rem !important;
-}
-.stMultiSelect span[data-baseweb="tag"] {
-    background: #1e1e1e !important;
-    color: #909090 !important;
-    border: 1px solid #2a2a2a !important;
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.72rem !important;
-    border-radius: 4px !important;
-}
-.stCheckbox label p {
-    font-family: 'Geist', sans-serif !important;
-    font-size: 0.975rem !important;
-    color: #909090 !important;
-}
-.stTextInput > div > div > input, .stSelectbox > div > div > div {
-    border-radius: 8px !important;
-    border: 1px solid #e5e7eb !important;
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.875rem !important;
-    background: #fff !important;
-    color: #f0f0f0 !important;
-}
-.stTextInput > div > div > input:focus { border-color: #f0f0f0 !important; box-shadow: none !important; }
-.stFileUploader > div {
-    border-radius: 8px !important;
-    border: 1px dashed #e5e7eb !important;
-    background: #0a0a0a !important;
-}
-[data-testid="stMetricValue"] {
-    font-family: 'Instrument Serif', serif !important;
-    font-size: 2.25rem !important;
-    color: #f0f0f0 !important;
-}
-[data-testid="stMetricLabel"] {
-    font-family: 'DM Mono', monospace !important;
-    font-size: 0.67rem !important;
-    color: #444 !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-}
-.stSuccess, .stError {
-    border-radius: 8px !important;
-    font-family: 'Geist', sans-serif !important;
-    font-size: 0.975rem !important;
-    border: 1px solid !important;
-}
-.stSuccess { background: #f0fdf4 !important; border-color: #bbf7d0 !important; color: #166534 !important; }
-.stError   { background: #fef2f2 !important; border-color: #fecaca !important; color: #991b1b !important; }
+div[data-testid="stExpander"] { background: #111 !important; border: 1px solid #1e1e1e !important; border-radius: 8px !important; box-shadow: none !important; margin-bottom: 0.5rem !important; }
+div[data-testid="stExpander"] summary { font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.07em !important; color: #444 !important; padding: 0.85rem 1.1rem !important; }
+.stMultiSelect span[data-baseweb="tag"] { background: #1e1e1e !important; color: #909090 !important; border: 1px solid #2a2a2a !important; font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; border-radius: 4px !important; }
+.stCheckbox label p { font-family: 'Geist', sans-serif !important; font-size: 0.975rem !important; color: #909090 !important; }
+.stTextInput > div > div > input { border-radius: 8px !important; border: 1px solid #e5e7eb !important; font-family: 'DM Mono', monospace !important; font-size: 0.875rem !important; }
+.stFileUploader > div { border-radius: 8px !important; border: 1px dashed #e5e7eb !important; background: #0a0a0a !important; }
+.stSuccess { border-radius: 8px !important; font-family: 'Geist', sans-serif !important; font-size: 0.975rem !important; border: 1px solid !important; background: #f0fdf4 !important; border-color: #bbf7d0 !important; color: #166534 !important; }
+.stError { border-radius: 8px !important; background: #fef2f2 !important; border: 1px solid #fecaca !important; color: #991b1b !important; }
 [data-testid="stSidebar"] { background: #0a0a0a !important; border-right: 1px solid #1e1e1e !important; }
 [data-testid="stSidebar"] * { color: #606060 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ─── Helpers ──────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────
 def load_vcf_file(filename):
     path = os.path.join(BASE_DIR, "sample_data", filename)
     return open(path).read() if os.path.exists(path) else get_sample_vcf()
@@ -637,16 +162,9 @@ def load_vcf_file(filename):
 def run_pipeline(vcf_content, drugs, pid, groq_key, run_ix=True, gen_pdf=True):
     parsed_vcf   = parse_vcf(vcf_content)
     risk_results = run_risk_assessment(parsed_vcf, drugs)
-    if groq_key:
-        risk_results = generate_all_explanations(groq_key, risk_results)
-    else:
-        for r in risk_results:
-            r["llm_explanation"] = {
-                "summary": "Add a Groq API key in the sidebar to enable AI explanations.",
-                "biological_mechanism": "", "variant_significance": "",
-                "clinical_implications": "", "success": False
-            }
-    all_outputs = [
+    # Always generate explanations — static templates fire if API is unavailable
+    risk_results = generate_all_explanations(groq_key, risk_results)
+    all_outputs  = [
         build_output_schema(patient_id=pid, drug=r["drug"], result=r,
                             parsed_vcf=parsed_vcf, llm_exp=r.get("llm_explanation", {}))
         for r in risk_results
@@ -663,9 +181,9 @@ def run_pipeline(vcf_content, drugs, pid, groq_key, run_ix=True, gen_pdf=True):
 
 def func_css(status):
     s = (status or "").lower()
-    if "no_function" in s: return "v-nofunc"
-    if "decreased"  in s: return "v-dec"
-    if "increased"  in s: return "v-inc"
+    if "no_function"  in s: return "v-nofunc"
+    if "decreased"    in s: return "v-dec"
+    if "increased"    in s: return "v-inc"
     return "v-norm"
 
 
@@ -675,12 +193,7 @@ SEV_PALETTE = {
     "high":     {"dot": "#ef4444", "bg": "#fef2f2", "border": "#fecaca", "text": "#b91c1c"},
     "critical": {"dot": "#dc2626", "bg": "#fef2f2", "border": "#fca5a5", "text": "#991b1b"},
 }
-IX_PALETTE = {
-    "low":      "#f59e0b",
-    "moderate": "#f97316",
-    "high":     "#ef4444",
-    "critical": "#dc2626",
-}
+IX_PALETTE = {"low": "#f59e0b", "moderate": "#f97316", "high": "#ef4444", "critical": "#dc2626"}
 
 
 def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
@@ -693,29 +206,15 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
 
     st.markdown(f"""
     <div class="stat-grid">
-      <div class="stat-cell">
-        <div class="stat-key">Patient</div>
-        <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:#e0e0e0;margin-top:4px;">{pid}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-key">Overall Risk</div>
-        <div class="stat-val">{sev_label}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-key">Drugs</div>
-        <div class="stat-val">{len(all_outputs)}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-key">Variants</div>
-        <div class="stat-val">{parsed_vcf['total_variants']}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-key">Genes</div>
+      <div class="stat-cell"><div class="stat-key">Patient</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:#e0e0e0;margin-top:4px;">{pid}</div></div>
+      <div class="stat-cell"><div class="stat-key">Overall Risk</div><div class="stat-val">{sev_label}</div></div>
+      <div class="stat-cell"><div class="stat-key">Drugs</div><div class="stat-val">{len(all_outputs)}</div></div>
+      <div class="stat-cell"><div class="stat-key">Variants</div><div class="stat-val">{parsed_vcf['total_variants']}</div></div>
+      <div class="stat-cell"><div class="stat-key">Genes</div>
         <div class="stat-val">{len(parsed_vcf['detected_genes'])}<span style="font-size:1rem;color:#d1d5db;">/6</span></div>
-        <div class="stat-sub">{genes_str}</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div class="stat-sub">{genes_str}</div></div>
+    </div>""", unsafe_allow_html=True)
 
     # Downloads
     dc1, dc2, dc3 = st.columns(3)
@@ -736,11 +235,11 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # Interactions
+    # Interactions panel
     if ix_report and ix_report["interactions_found"]:
         with st.expander(f"Drug–Drug Interactions  ·  {ix_report['total_interactions']} found", expanded=True):
             for ix in ix_report["all_interactions"]:
-                sev = ix.get("severity", "low")
+                sev   = ix.get("severity", "low")
                 color = IX_PALETTE.get(sev, "#94a3b8")
                 drugs_str = " + ".join(
                     ix.get("drugs_involved", []) or
@@ -756,31 +255,29 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
                   </div>
                   <span class="ix-sev" style="background:{color}18;color:{color};">{sev.upper()}</span>
                 </div>""", unsafe_allow_html=True)
-
     elif ix_report:
         st.markdown("""
         <div style="padding:0.75rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;
              border-radius:8px;font-size:0.8rem;color:#16a34a;margin-bottom:1rem;
              font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.04em;">
-          ✓ No significant drug–drug interactions detected.
-        </div>""", unsafe_allow_html=True)
+          ✓ No significant drug–drug interactions detected.</div>""", unsafe_allow_html=True)
 
     # Per-drug cards
     for output in all_outputs:
-        risk_label = output["risk_assessment"]["risk_label"]
-        drug_name  = output["drug"]
-        severity   = output["risk_assessment"]["severity"]
-        confidence = output["risk_assessment"]["confidence_score"]
-        gene       = output["pharmacogenomic_profile"]["primary_gene"]
-        diplotype  = output["pharmacogenomic_profile"]["diplotype"]
-        phenotype  = output["pharmacogenomic_profile"]["phenotype"]
-        variants   = output["pharmacogenomic_profile"]["detected_variants"]
-        rec        = output["clinical_recommendation"]["dosing_recommendation"]
-        alts       = output["clinical_recommendation"].get("alternative_drugs", [])
-        monitoring = output["clinical_recommendation"].get("monitoring_required", "")
-        exp        = output["llm_generated_explanation"]
-        rc         = RISK_CONFIG.get(risk_label, RISK_CONFIG["Unknown"])
-        sp         = SEV_PALETTE.get(severity, {})
+        risk_label  = output["risk_assessment"]["risk_label"]
+        drug_name   = output["drug"]
+        severity    = output["risk_assessment"]["severity"]
+        confidence  = output["risk_assessment"]["confidence_score"]
+        gene        = output["pharmacogenomic_profile"]["primary_gene"]
+        diplotype   = output["pharmacogenomic_profile"]["diplotype"]
+        phenotype   = output["pharmacogenomic_profile"]["phenotype"]
+        variants    = output["pharmacogenomic_profile"]["detected_variants"]
+        rec         = output["clinical_recommendation"]["dosing_recommendation"]
+        alts        = output["clinical_recommendation"].get("alternative_drugs", [])
+        monitoring  = output["clinical_recommendation"].get("monitoring_required", "")
+        exp         = output["llm_generated_explanation"]
+        rc          = RISK_CONFIG.get(risk_label, RISK_CONFIG["Unknown"])
+        sp          = SEV_PALETTE.get(severity, {})
 
         if severity in ("critical", "high") and sp:
             st.markdown(f"""
@@ -792,7 +289,6 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
               </div>
             </div>""", unsafe_allow_html=True)
 
-        # Card
         st.markdown(f"""
         <div class="rcard">
           <div class="rcard-top">
@@ -803,41 +299,24 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
                 <div class="rcard-meta">{gene} · {diplotype} · {phenotype}</div>
               </div>
             </div>
-            <span class="rcard-badge" style="color:{rc['text']};border-color:{rc['border']};background:{rc['bg']};">
-              {rc['label']}
-            </span>
+            <span class="rcard-badge" style="color:{rc['text']};border-color:{rc['border']};background:{rc['bg']};">{rc['label']}</span>
           </div>
           <div class="rcard-body">
             <div class="mc-row">
-              <div class="mc-cell">
-                <div class="mc-key">Phenotype</div>
-                <div class="mc-val" style="color:{rc['text']};">{phenotype}</div>
-              </div>
-              <div class="mc-cell">
-                <div class="mc-key">Severity</div>
-                <div class="mc-val">{severity.title()}</div>
-              </div>
-              <div class="mc-cell">
-                <div class="mc-key">Confidence</div>
-                <div class="mc-val">{confidence:.0%}</div>
-              </div>
-              <div class="mc-cell">
-                <div class="mc-key">Variants</div>
-                <div class="mc-val">{len(variants)}</div>
-              </div>
+              <div class="mc-cell"><div class="mc-key">Phenotype</div><div class="mc-val" style="color:{rc['text']};">{phenotype}</div></div>
+              <div class="mc-cell"><div class="mc-key">Severity</div><div class="mc-val">{severity.title()}</div></div>
+              <div class="mc-cell"><div class="mc-key">Confidence</div><div class="mc-val">{confidence:.0%}</div></div>
+              <div class="mc-cell"><div class="mc-key">Variants</div><div class="mc-val">{len(variants)}</div></div>
             </div>
             <div class="conf-wrap">
               <div class="conf-header">
                 <span>Prediction confidence</span>
                 <span style="color:{rc['text']};font-weight:500;">{confidence:.0%}</span>
               </div>
-              <div class="conf-track">
-                <div class="conf-fill" style="width:{confidence*100:.1f}%;background:{rc['dot']};"></div>
-              </div>
+              <div class="conf-track"><div class="conf-fill" style="width:{confidence*100:.1f}%;background:{rc['dot']};"></div></div>
             </div>
         """, unsafe_allow_html=True)
 
-        # Variants
         if variants:
             rows = ""
             for v in variants:
@@ -854,19 +333,14 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
             <hr class="h-rule">
             <div class="inline-label">Detected Variants ({len(variants)})</div>
             <table class="vtable">
-              <thead><tr>
-                <th>rsID</th><th>Star Allele</th><th>Change</th><th>Position</th><th>Function</th>
-              </tr></thead>
+              <thead><tr><th>rsID</th><th>Star Allele</th><th>Change</th><th>Position</th><th>Function</th></tr></thead>
               <tbody>{rows}</tbody>
             </table>""", unsafe_allow_html=True)
         else:
-            st.markdown("""
-            <div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;
-                 padding:0.5rem 0 0.25rem;letter-spacing:0.04em;">
-              No variants detected — wild-type (*1/*1) assumed
-            </div>""", unsafe_allow_html=True)
+            st.markdown("""<div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;
+                 padding:0.5rem 0 0.25rem;letter-spacing:0.04em;">No variants detected — wild-type (*1/*1) assumed</div>""",
+                unsafe_allow_html=True)
 
-        # Recommendation
         st.markdown(f"""
         <hr class="h-rule">
         <div class="inline-label">CPIC Recommendation</div>
@@ -877,8 +351,7 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
 
         if alts:
             chips = "".join(f'<span class="alt-chip">{a}</span>' for a in alts)
-            st.markdown(f"""
-            <div class="inline-label">Alternative Drugs</div>
+            st.markdown(f"""<div class="inline-label">Alternative Drugs</div>
             <div class="alt-chips" style="margin-bottom:1rem;">{chips}</div>""", unsafe_allow_html=True)
 
         if monitoring:
@@ -893,6 +366,11 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
             </div>""", unsafe_allow_html=True)
 
         if exp.get("summary"):
+            model_used = exp.get("model_used", "")
+            is_static  = "static" in model_used.lower()
+            model_label = model_used if model_used else "llama-3.3-70b-versatile"
+            badge_class = "ai-badge-static" if is_static else "ai-badge"
+
             blocks = ""
             for lbl, key in [("Summary","summary"),("Biological Mechanism","biological_mechanism"),
                               ("Variant Significance","variant_significance"),("Clinical Implications","clinical_implications")]:
@@ -904,7 +382,7 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
             st.markdown(f"""
             <div class="ai-block">
               <div class="ai-header">
-                <span class="ai-badge">Groq LLaMA 3.3</span>
+                <span class="{badge_class}">{model_label}</span>
                 <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#9ca3af;letter-spacing:0.06em;">
                   AI Explanation · {drug_name}
                 </span>
@@ -932,10 +410,9 @@ st.markdown("""
   <div style="display:flex;gap:0.5rem;align-items:center;">
     <span class="pg-pill">CPIC Aligned</span>
     <span class="pg-pill">RIFT 2026</span>
-    <span class="pg-pill">v2.0</span>
+    <span class="pg-pill">v4.0</span>
   </div>
-</div>
-""", unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
@@ -944,11 +421,14 @@ with st.sidebar:
            text-transform:uppercase;color:#9ca3af;margin-bottom:0.5rem;">Groq API Key</div>
     </div>""", unsafe_allow_html=True)
     groq_api_key = st.text_input("Groq API Key", value=os.environ.get("GROQ_API_KEY", ""),
-                                  type="password", label_visibility="collapsed",
-                                  placeholder="gsk_...")
+                                  type="password", label_visibility="collapsed", placeholder="gsk_...")
     st.markdown("""<div style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#9ca3af;
-         padding-bottom:1rem;">console.groq.com</div>
-    <hr style="border:none;border-top:1px solid #e5e7eb;">
+         padding-bottom:0.5rem;">console.groq.com</div>
+    <div style="font-family:'DM Mono',monospace;font-size:0.58rem;color:#3a3a3a;
+         padding-bottom:1rem;line-height:1.8;">
+      Primary: LLaMA 3.3 70B<br>Fallback: LLaMA 3.1 8B<br>Safety net: static templates
+    </div>
+    <hr style="border:none;border-top:1px solid #1e1e1e;">
     <div style="padding:0.75rem 0 0.5rem;font-family:'DM Mono',monospace;font-size:0.6rem;
          letter-spacing:0.12em;text-transform:uppercase;color:#9ca3af;">Gene Map</div>""",
         unsafe_allow_html=True)
@@ -985,7 +465,7 @@ with tab1:
                 peek = uploaded_file.read(500).decode("utf-8", errors="replace")
                 uploaded_file.seek(0)
                 if "##fileformat=VCF" not in peek and "#CHROM" not in peek:
-                    st.error("Invalid VCF file")
+                    st.error("Invalid VCF file — must be VCF v4.x format")
                     uploaded_file = None
                 else:
                     st.success(f"✓  {uploaded_file.name}  ·  {sz:.2f} MB")
@@ -1053,7 +533,7 @@ with tab1:
           <div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;">{pid}</div>
         </div>""", unsafe_allow_html=True)
 
-        with st.spinner("Analyzing..."):
+        with st.spinner("Analysing…"):
             parsed_vcf, risk_results, all_outputs, ix_report, pdf_bytes = run_pipeline(
                 vcf_content, all_drugs, pid, groq_api_key, run_interactions, generate_pdf
             )
@@ -1100,10 +580,7 @@ TEST_SUITE = [
      "desc":"Loss-of-function alleles across all 6 genes"},
 ]
 
-RISK_DOT = {
-    "Safe":"#22c55e","Adjust Dosage":"#f59e0b",
-    "Toxic":"#ef4444","Ineffective":"#8b5cf6","Unknown":"#9ca3af",
-}
+RISK_DOT = {"Safe":"#22c55e","Adjust Dosage":"#f59e0b","Toxic":"#ef4444","Ineffective":"#8b5cf6","Unknown":"#9ca3af"}
 
 with tab2:
     st.markdown("""
@@ -1140,28 +617,29 @@ with tab2:
 
     if run_all:
         passed, failed = 0, 0
-        suite_results = []
+        suite_results  = []
         for sc in TEST_SUITE:
             vcf = load_vcf_file(sc["file"])
             pid = f"TEST-{sc['name'][:6].replace(' ','').upper()}"
             key = groq_api_key if use_llm else ""
-            with st.spinner(f"Running: {sc['name']}..."):
+            with st.spinner(f"Running: {sc['name']}…"):
                 pv, _, ao, _, _ = run_pipeline(vcf, sc["drugs"], pid, key, run_ix=False, gen_pdf=False)
             rows, sc_pass = [], True
             for out in ao:
-                drug = out["drug"]
-                got  = out["risk_assessment"]["risk_label"]
-                exp  = sc["expected"].get(drug, "")
-                ok   = (got == exp) if exp else True
+                drug  = out["drug"]
+                got   = out["risk_assessment"]["risk_label"]
+                exp   = sc["expected"].get(drug, "")
+                ok    = (got == exp) if exp else True
                 pheno = out["pharmacogenomic_profile"]["phenotype"]
                 diplo = out["pharmacogenomic_profile"]["diplotype"]
                 rows.append((drug, got, exp, ok, pheno, diplo))
                 if not ok: sc_pass = False
             if sc_pass: passed += 1
             else:       failed += 1
-            suite_results.append({"name": sc["name"], "pass": sc_pass, "rows": rows, "outputs": ao, "file": sc["file"]})
+            suite_results.append({"name": sc["name"], "pass": sc_pass, "rows": rows,
+                                   "outputs": ao, "file": sc["file"]})
 
-        total = passed + failed
+        total    = passed + failed
         ok_color = "#16a34a" if failed == 0 else "#b45309"
         ok_bg    = "#f0fdf4" if failed == 0 else "#fffbeb"
         ok_bdr   = "#bbf7d0" if failed == 0 else "#fde68a"
@@ -1181,38 +659,31 @@ with tab2:
             with st.expander(f"{sym}  {sr['name']}  —  {'PASS' if sr['pass'] else 'FAIL'}", expanded=not sr["pass"]):
                 rows_html = ""
                 for drug, got, exp, ok, pheno, diplo in sr["rows"]:
-                    rc = RISK_CONFIG.get(got, RISK_CONFIG["Unknown"])
+                    rc    = RISK_CONFIG.get(got, RISK_CONFIG["Unknown"])
                     ok_c  = "#16a34a" if ok else "#dc2626"
                     ok_bg2 = "#f0fdf4" if ok else "#fef2f2"
                     rows_html += f"""<div class="rt-row">
                       <div class="rt-cell" style="font-weight:600;color:#e0e0e0;">{drug}</div>
-                      <div class="rt-cell">
-                        <span style="display:inline-flex;align-items:center;gap:6px;">
-                          <span style="width:6px;height:6px;border-radius:50%;background:{rc['dot']};flex-shrink:0;"></span>
-                          {got}
-                        </span>
-                      </div>
+                      <div class="rt-cell"><span style="display:inline-flex;align-items:center;gap:6px;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:{rc['dot']};flex-shrink:0;"></span>{got}
+                      </span></div>
                       <div class="rt-cell" style="color:#9ca3af;">{exp or '—'}</div>
                       <div class="rt-cell" style="color:#6b7280;">{diplo} / {pheno}</div>
                       <div class="rt-cell" style="justify-content:center;background:{ok_bg2};color:{ok_c};font-weight:700;">{sym}</div>
                     </div>"""
                 st.markdown(f"""<div class="rt-wrap">
                   <div class="rt-head">
-                    <div class="rt-hcell">Drug</div>
-                    <div class="rt-hcell">Result</div>
-                    <div class="rt-hcell">Expected</div>
-                    <div class="rt-hcell">Diplotype / Phenotype</div>
+                    <div class="rt-hcell">Drug</div><div class="rt-hcell">Result</div>
+                    <div class="rt-hcell">Expected</div><div class="rt-hcell">Diplotype / Phenotype</div>
                     <div class="rt-hcell"></div>
-                  </div>
-                  {rows_html}
-                </div>""", unsafe_allow_html=True)
+                  </div>{rows_html}</div>""", unsafe_allow_html=True)
 
                 d1, d2 = st.columns(2)
                 with d1:
                     st.download_button("Download JSON", data=json.dumps(sr["outputs"], indent=2),
                                        file_name=f"test_{sr['file'].replace('.vcf','')}.json",
-                                       mime="application/json",
-                                       key=f"tsc_{sr['name'][:14]}", use_container_width=True)
+                                       mime="application/json", key=f"tsc_{sr['name'][:14]}",
+                                       use_container_width=True)
                 with d2:
                     st.download_button("Download VCF", data=load_vcf_file(sr["file"]),
                                        file_name=sr["file"], mime="text/plain",
