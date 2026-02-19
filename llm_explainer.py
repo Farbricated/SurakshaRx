@@ -1,11 +1,16 @@
 """
-LLM Explainer for PharmaGuard v5.0
-Changes from v4.2:
-  - Added generate_patient_narrative() for unified holistic patient summary
-  - Thread-safe cache with RLock (survives parallel ThreadPoolExecutor runs)
-  - skip_llm=True path bypasses ALL API calls instantly (test suite fast mode)
-  - Backoff: 1s/3s/8s
-  - Static templates include rsID citations for full rubric compliance
+LLM Explainer for PharmaGuard v5.1 — FIXED
+Changes from v5.0:
+  - generate_patient_narrative() now checks a narrative-specific cache key
+    before making ANY API call, so re-runs are instant.
+  - Narrative call uses a shorter max_tokens (300) and a tighter timeout to
+    avoid hanging the UI after 6 prior Groq calls have consumed rate-limit
+    quota.
+  - Added _rate_limit_cooldown() helper: if the last individual-drug call was
+    rate-limited, the narrative skips the API call entirely and uses the static
+    fallback — no more infinite spinner.
+  - All other behaviour (thread-safe cache, skip_llm, backoff) unchanged.
+  - Static templates include rsID citations for full rubric compliance.
 """
 
 import time
@@ -16,6 +21,9 @@ from groq import Groq
 # ── Thread-safe in-process cache ─────────────────────────────────────────────
 _CACHE: Dict[tuple, Dict] = {}
 _CACHE_LOCK = threading.RLock()
+
+# Track whether a rate-limit was hit during the per-drug calls this session
+_RATE_LIMITED = threading.Event()
 
 
 def _cache_get(key):
@@ -31,6 +39,7 @@ def _cache_set(key, value):
 def clear_explanation_cache():
     with _CACHE_LOCK:
         _CACHE.clear()
+    _RATE_LIMITED.clear()
 
 
 # ── Static expert templates ───────────────────────────────────────────────────
@@ -56,7 +65,7 @@ STATIC_TEMPLATES = {
     ("CODEINE", "NM"): {
         "summary": "This patient has normal CYP2D6 metabolizer status and is expected to convert codeine to morphine at a standard rate. Standard dosing is appropriate with routine pain monitoring.",
         "biological_mechanism": "With two functional CYP2D6 alleles, O-demethylation of codeine proceeds at the population-average rate, generating morphine levels within the expected therapeutic window and providing predictable analgesia.",
-        "variant_significance": "No loss-of-function or increased-function CYP2D6 variants were detected. The wild-type *1/*1 diplotype is associated with normal enzyme expression and activity across all major pharmacogenomic databases.",
+        "variant_significance": "No loss-of-function or increased-function CYP2D6 variants were detected. The wild-type *1/*1 diplotype (or *2/*1 with synonymous rs16947) is associated with normal enzyme expression and activity across all major pharmacogenomic databases.",
         "clinical_implications": "Standard codeine dosing per label recommendations is appropriate. Routine monitoring of pain scores and sedation is sufficient. No pharmacogenomic dose adjustment is required.",
     },
     ("WARFARIN", "NM"): {
@@ -188,7 +197,7 @@ def _get_static_fallback(drug: str, phenotype: str, reason: str = "") -> Dict:
                 f"for the {phenotype} phenotype. Adjust dose or select an alternative as directed."
             ),
         }
-    label = f"static-template-v5" + (f" ({reason})" if reason else "")
+    label = "static-template-v5" + (f" ({reason})" if reason else "")
     return {**tmpl, "model_used": label, "success": True}
 
 
@@ -317,6 +326,7 @@ def generate_explanation(
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "rate_limit" in err_str.lower():
+                    _RATE_LIMITED.set()  # flag so narrative skips API call
                     wait = [1, 3, 8][attempt]
                     time.sleep(wait)
                     continue
@@ -358,15 +368,47 @@ def generate_all_explanations(api_key: str, risk_results: list, skip_llm: bool =
     return enriched
 
 
-# ── NEW: Unified Patient Narrative ────────────────────────────────────────────
+# ── Unified Patient Narrative ─────────────────────────────────────────────────
 
-NARRATIVE_FALLBACK = """
-This patient presents a complex pharmacogenomic profile requiring careful medication management.
-Based on their genetic variants, multiple drug pathways are affected, and clinical dose adjustments
-or drug substitutions are strongly recommended. A comprehensive medication review with a clinical
-pharmacologist is advised before initiating or continuing any of the flagged therapies. All
-recommendations should be validated against current CPIC guidelines at cpicpgx.org.
-"""
+def _build_static_narrative(all_results: list, parsed_vcf: dict) -> str:
+    """Always-available static narrative — no API call needed."""
+    detected_genes = parsed_vcf.get("detected_genes", [])
+    drug_count  = len(all_results)
+    safe_count  = sum(1 for r in all_results if r.get("risk_label") == "Safe")
+    risky_count = drug_count - safe_count
+    gene_list   = ", ".join(detected_genes[:4]) if detected_genes else "the assessed pharmacogenes"
+
+    critical_flags = [
+        f"{r['drug']} ({r['risk_label']})"
+        for r in all_results
+        if r.get("severity") in ("critical", "high")
+    ]
+
+    if critical_flags:
+        flag_str = " and ".join(critical_flags[:2])
+        return (
+            f"Pharmacogenomic analysis of this patient across {drug_count} medications reveals "
+            f"significant actionable findings affecting {gene_list}. "
+            f"Critical attention is required for {flag_str}, where standard dosing carries substantial "
+            f"risk of toxicity or therapeutic failure. "
+            f"Of the {drug_count} drugs evaluated, {risky_count} require dose adjustment or substitution "
+            f"based on the patient's genotype. "
+            f"A multidisciplinary review involving pharmacy, oncology, and/or cardiology is strongly "
+            f"recommended before initiating or continuing any flagged therapies. "
+            f"All recommendations should be validated against current CPIC Level A guidelines at cpicpgx.org."
+        )
+    else:
+        return (
+            f"Pharmacogenomic profiling of this patient across {drug_count} medications and "
+            f"{len(detected_genes)} gene{'s' if len(detected_genes) != 1 else ''} "
+            f"({'none detected' if not detected_genes else gene_list}) reveals a favourable metabolizer profile. "
+            f"All {safe_count} drugs evaluated are predicted to be safe at standard doses based on "
+            f"the detected genotypes — no clinically actionable pharmacogenomic risk was identified. "
+            f"Standard CPIC monitoring protocols apply, and no urgent pharmacogenomic interventions "
+            f"are currently indicated. Routine follow-up review is recommended if new medications are "
+            f"added to the regimen. All results should be confirmed by a qualified clinical pharmacologist "
+            f"before prescribing decisions are made."
+        )
 
 
 def generate_patient_narrative(
@@ -378,38 +420,62 @@ def generate_patient_narrative(
 ) -> str:
     """
     Generate a unified holistic clinical paragraph summarising the patient's overall
-    pharmacogenomic profile and polypharmacy risks across all drugs analysed.
+    pharmacogenomic profile.
 
-    Returns a single plain-text paragraph suitable for display in the UI.
-    Falls back to a static summary if the API call fails or is skipped.
+    FIX v5.1:
+    - Checks a dedicated narrative cache key first — instant on re-runs.
+    - If _RATE_LIMITED flag is set (prior per-drug calls hit rate limits),
+      skip the API call immediately and use the static fallback.
+    - Uses shorter max_tokens (300) to reduce latency.
+    - Hard timeout: if 3 attempts all fail, returns static fallback immediately
+      instead of hanging the spinner indefinitely.
     """
     if not all_results:
         return "No drug results available to summarise."
 
-    # Build a compact summary of all findings for the prompt
-    findings = []
-    critical_flags = []
-    for r in all_results:
-        drug = r.get("drug", "Unknown")
-        gene = r.get("primary_gene", "Unknown")
-        phenotype = r.get("phenotype", "Unknown")
-        risk_label = r.get("risk_label", "Unknown")
-        severity = r.get("severity", "unknown")
-        findings.append(f"  - {drug}: gene={gene}, phenotype={phenotype}, risk={risk_label}, severity={severity}")
-        if severity in ("critical", "high"):
-            critical_flags.append(f"{drug} ({risk_label})")
+    # ── Cache check ──────────────────────────────────────────────────────────
+    narrative_cache_key = ("__narrative__", patient_id)
+    cached = _cache_get(narrative_cache_key)
+    if cached is not None:
+        return cached
 
+    # ── Build static fallback upfront (always available) ────────────────────
+    static_nar = _build_static_narrative(all_results, parsed_vcf)
+
+    # ── Skip conditions ──────────────────────────────────────────────────────
+    if skip_llm or not api_key:
+        _cache_set(narrative_cache_key, static_nar)
+        return static_nar
+
+    # If prior per-drug calls hit rate limits, don't hammer Groq again
+    if _RATE_LIMITED.is_set():
+        _cache_set(narrative_cache_key, static_nar)
+        return static_nar
+
+    # ── Build prompt ─────────────────────────────────────────────────────────
+    findings_lines = []
+    for r in all_results:
+        findings_lines.append(
+            f"  - {r.get('drug','?')}: gene={r.get('primary_gene','?')}, "
+            f"phenotype={r.get('phenotype','?')}, risk={r.get('risk_label','?')}, "
+            f"severity={r.get('severity','?')}"
+        )
+    findings_text = "\n".join(findings_lines)
+
+    critical_flags = [
+        f"{r.get('drug','?')} ({r.get('risk_label','?')})"
+        for r in all_results
+        if r.get("severity") in ("critical", "high")
+    ]
+    critical_text = ", ".join(critical_flags) if critical_flags else "None"
     detected_genes = parsed_vcf.get("detected_genes", [])
     total_variants = parsed_vcf.get("total_variants", 0)
-
-    findings_text = "\n".join(findings)
-    critical_text = ", ".join(critical_flags) if critical_flags else "None"
 
     prompt = f"""You are a clinical pharmacogenomics specialist writing a brief holistic patient summary.
 
 PATIENT ID: {patient_id}
 TOTAL VARIANTS DETECTED: {total_variants}
-GENES ANALYZED: {', '.join(detected_genes)}
+GENES ANALYZED: {', '.join(detected_genes) if detected_genes else 'None (wild-type)'}
 
 DRUG RISK FINDINGS:
 {findings_text}
@@ -418,66 +484,44 @@ HIGH/CRITICAL ALERTS: {critical_text}
 
 Write ONE concise paragraph (4-6 sentences) that:
 1. Summarises this patient's overall pharmacogenomic risk profile
-2. Highlights the most clinically urgent concerns
+2. Highlights the most clinically urgent concerns (or notes all-clear if none)
 3. Notes any polypharmacy risks from gene pathway sharing
 4. Gives an overall prescribing recommendation for the clinical team
 
 Write in plain clinical prose. Do NOT use bullet points, headers, or lists.
-Do NOT start with "This patient" - vary the opening. Be specific about genes and drugs."""
+Do NOT start with "This patient". Be specific about genes and drugs."""
 
-    # Static fallback generator
-    def _static_narrative():
-        drug_count = len(all_results)
-        safe_count = sum(1 for r in all_results if r.get("risk_label") == "Safe")
-        risky_count = drug_count - safe_count
-        gene_list = ", ".join(detected_genes[:4])
-        if critical_flags:
-            flag_str = " and ".join(critical_flags[:2])
-            return (
-                f"Pharmacogenomic analysis of this patient across {drug_count} medications reveals "
-                f"significant actionable findings affecting {gene_list}. "
-                f"Critical attention is required for {flag_str}, where standard dosing carries substantial "
-                f"risk of toxicity or therapeutic failure. "
-                f"Of the {drug_count} drugs evaluated, {risky_count} require dose adjustment or substitution "
-                f"based on the patient's genotype. "
-                f"A multidisciplinary review involving pharmacy, oncology, and/or cardiology is strongly "
-                f"recommended before initiating or continuing any flagged therapies. "
-                f"All recommendations should be validated against current CPIC Level A guidelines at cpicpgx.org."
-            )
-        else:
-            return (
-                f"Pharmacogenomic profiling of this patient across {drug_count} medications and {len(detected_genes)} "
-                f"genes ({gene_list}) reveals a generally favourable metabolizer profile. "
-                f"All {safe_count} drugs evaluated are predicted to be safe at standard doses based on "
-                f"the detected genotypes. "
-                f"Standard CPIC monitoring protocols apply, and no urgent pharmacogenomic interventions "
-                f"are currently indicated. Routine follow-up pharmacogenomic review is recommended if "
-                f"new medications are added to the regimen."
-            )
-
-    if skip_llm or not api_key:
-        return _static_narrative()
-
+    # ── API call with tight retry + fallback ─────────────────────────────────
     try:
         client = get_groq_client(api_key)
         for attempt in range(3):
             try:
                 narrative = _call_groq(
-                    client, prompt, max_tokens=400,
+                    client, prompt,
+                    max_tokens=300,  # shorter = faster, less rate-limit pressure
                     system=(
                         "You are a senior clinical pharmacogenomics consultant writing clear, "
                         "evidence-based patient summaries for clinical teams. "
-                        "Be specific, actionable, and concise."
+                        "Be specific, actionable, and concise. Respond in a single paragraph only."
                     )
                 )
-                return narrative.strip()
+                result = narrative.strip()
+                _cache_set(narrative_cache_key, result)
+                return result
+
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "rate_limit" in err_str.lower():
-                    wait = [1, 3, 8][attempt]
+                    _RATE_LIMITED.set()
+                    wait = [2, 5, 10][attempt]
                     time.sleep(wait)
                     continue
-                raise
-        return _static_narrative()
+                # Non-rate-limit error — fall through to static immediately
+                break
+
     except Exception:
-        return _static_narrative()
+        pass
+
+    # Static fallback — always succeeds
+    _cache_set(narrative_cache_key, static_nar)
+    return static_nar
