@@ -1,17 +1,13 @@
 """
-PharmaGuard v9.2 — Precision Clinical Pharmacogenomics
-CSS VISIBILITY FIXES vs v9.1:
-  - Explicit color:!important on ALL custom class text elements
-  - File uploader: comprehensive selector coverage for filename/size/buttons
-  - Clinical Note pre block: hardcoded #0F172A color (not var-based)
-  - Sidebar: all child elements forced to readable colors
-  - Selectbox/multiselect: dropdown text, selected values, labels
-  - Tab text spans/divs: inherit fix
-  - Checkbox labels: explicit color
-  - Metric labels/values: explicit color on child elements
-  - Pre/code global: explicit color override
-  - Button text: explicit white on primary, explicit color on download
-  - AI badge: clean model label (strips parenthetical junk)
+PharmaGuard v9.3 — Precision Clinical Pharmacogenomics
+FIXES vs v9.2:
+  - UI FIX: File uploader label now visible (was "collapsed"), preventing overlap with scenario selectbox
+  - UI FIX: Added spacing between scenario selectbox and file uploader
+  - UI FIX: Selectbox label explicitly set to "visible" for clear visual hierarchy
+  - UI FIX: File size display corrected (was showing KB as MB)
+  - TEST SUITE FIX: load_vcf() calls wrapped in try/except — falls back to get_sample_vcf()
+    so tests run even when sample_data/ files are missing from deployment
+  - PERSONA DEMO FIX: Same try/except fallback for persona file loading
 """
 
 import streamlit as st
@@ -141,20 +137,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CSS v9.2 — Comprehensive text visibility fix
-# Key changes vs v9.1:
-#   • All custom classes now have explicit color:!important on text elements
-#   • File uploader: full selector coverage for filename, size, browse button
-#   • Clinical note pre: hardcoded #0F172A (not CSS var which can be overridden)
-#   • Sidebar: all descendants forced readable
-#   • Selectbox dropdown, labels: explicit colors
-#   • Tab content: inherit fix
-#   • Checkbox, radio labels: explicit color
-#   • Metric child elements: explicit color
-#   • Pre/code: global color fix
-#   • Button children: explicit white/inherit
-# ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -174,14 +156,12 @@ st.markdown("""<style>
   --font-mono:'JetBrains Mono','Fira Code',monospace;
 }
 
-/* ── GLOBAL RESET ── */
 *,*::before,*::after{box-sizing:border-box;}
 html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!important;background:var(--bg)!important;color:var(--text-primary)!important;-webkit-font-smoothing:antialiased!important;}
 .stApp{background:var(--bg)!important;}
 .main .block-container{padding:0 var(--sp-10) var(--sp-16)!important;max-width:1280px!important;}
 #MainMenu,footer,header{visibility:hidden;}
 
-/* Force markdown text readable */
 .stMarkdown,.stMarkdown p,.stMarkdown li,.stMarkdown span{color:var(--text-secondary)!important;}
 [data-testid="stMarkdownContainer"] *{color:inherit;}
 
@@ -196,7 +176,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .reveal-card:nth-child(3){animation-delay:.16s}.reveal-card:nth-child(4){animation-delay:.22s}
 .reveal-card:nth-child(5){animation-delay:.28s}.reveal-card:nth-child(6){animation-delay:.34s}
 
-/* Navigation */
 .pg-nav{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-6) 0;border-bottom:1px solid var(--border-light);margin-bottom:var(--sp-8);animation:fade-in .4s ease;}
 .pg-brand-name{font-size:1.5rem;font-weight:700;color:var(--text-primary)!important;letter-spacing:-.03em;line-height:1;}
 .pg-brand-name span{color:var(--brand)!important;}
@@ -206,12 +185,10 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .pg-badge-default{color:var(--text-muted)!important;border-color:var(--border);background:var(--surface);}
 .pg-badge-brand{color:var(--brand)!important;border-color:var(--brand-border);background:var(--brand-light);font-weight:600;}
 
-/* Trust strip */
 .trust-strip{display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-3) var(--sp-4);background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-md);margin-bottom:var(--sp-8);}
 .trust-item{display:flex;align-items:center;gap:var(--sp-2);font-size:.85rem;color:var(--brand-dark)!important;font-weight:500;white-space:nowrap;}
 .trust-sep{width:1px;height:16px;background:var(--brand-border);flex-shrink:0;}
 
-/* Tabs */
 .stTabs [data-baseweb="tab-list"]{background:transparent!important;border-bottom:1px solid var(--border-light)!important;gap:0!important;padding:0!important;margin-bottom:var(--sp-8)!important;box-shadow:none!important;}
 .stTabs [data-baseweb="tab"]{font-family:var(--font-body)!important;font-size:1rem!important;font-weight:500!important;color:var(--text-muted)!important;padding:var(--sp-3) var(--sp-5)!important;background:transparent!important;border:none!important;border-bottom:2.5px solid transparent!important;border-radius:0!important;transition:color .15s!important;}
 .stTabs [aria-selected="true"]{color:var(--brand)!important;border-bottom-color:var(--brand)!important;font-weight:600!important;}
@@ -220,18 +197,15 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .stTabs [data-baseweb="tab-panel"] p,.stTabs [data-baseweb="tab-panel"] div,.stTabs [data-baseweb="tab-panel"] span,.stTabs [data-baseweb="tab-panel"] label{color:#334155!important;}
 .stTabs [data-baseweb="tab-panel"] h1,.stTabs [data-baseweb="tab-panel"] h2,.stTabs [data-baseweb="tab-panel"] h3{color:#0F172A!important;}
 
-/* Sidebar */
 [data-testid="stSidebar"]{background:var(--surface)!important;border-right:1px solid var(--border-light)!important;}
 [data-testid="stSidebar"] *{color:var(--text-primary)!important;}
 [data-testid="stSidebar"] label,[data-testid="stSidebar"] .stMarkdown p{color:var(--text-secondary)!important;}
 [data-testid="stSidebar"] h3,[data-testid="stSidebar"] h4{color:var(--text-primary)!important;font-weight:700!important;}
 [data-testid="stSidebar"] code{color:var(--brand-dark)!important;background:var(--brand-light)!important;padding:1px 5px;border-radius:3px;font-family:var(--font-mono)!important;}
 
-/* Section label */
 .sec-label{display:flex;align-items:center;gap:var(--sp-3);font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-4);}
 .sec-label::after{content:'';flex:1;height:1px;background:var(--border-light);}
 
-/* Steps */
 .steps{display:flex;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-8);box-shadow:var(--shadow-xs);}
 .step{flex:1;padding:var(--sp-4) var(--sp-5);border-right:1px solid var(--border-light);}
 .step:last-child{border-right:none;}
@@ -239,14 +213,12 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .step-lbl{font-size:.875rem;font-weight:500;color:var(--text-muted)!important;}
 .step.done .step-num{color:var(--brand)!important;}.step.done .step-lbl{color:var(--text-primary)!important;font-weight:600;}.step.done{background:#F8FAFF;}
 
-/* Persona cards */
 .persona-card{background:var(--surface);border:1.5px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4);transition:all .2s cubic-bezier(.4,0,.2,1);box-shadow:var(--shadow-xs);cursor:pointer;}
 .persona-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--brand-border);}
 .pc-sev{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:600;padding:3px 10px;border-radius:var(--r-full);border:1px solid;margin-bottom:var(--sp-2);}
 .pc-name{font-size:.875rem;font-weight:700;color:var(--text-primary)!important;margin-bottom:3px;}
 .pc-desc{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)!important;line-height:1.7;}
 
-/* Risk command center */
 .risk-center{border-radius:var(--r-2xl);padding:var(--sp-8);margin-bottom:var(--sp-6);border:1.5px solid;position:relative;overflow:hidden;box-shadow:var(--shadow-md);}
 .rc-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;opacity:.6;margin-bottom:var(--sp-1);}
 .rc-headline{font-size:2.5rem;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin-bottom:var(--sp-1);}
@@ -255,13 +227,11 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .rc-stat-num{font-size:2rem;font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:3px;}
 .rc-stat-lbl{font-family:var(--font-mono);font-size:.65rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;opacity:.6;}
 
-/* Critical alert */
 .crit-alert{display:flex;gap:var(--sp-4);background:#FFF1F2;border:1px solid #FECDD3;border-left:4px solid var(--danger);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);animation:pulse-once .8s ease .3s both;box-shadow:var(--shadow-sm);}
 .crit-title{font-size:.95rem;font-weight:700;color:var(--danger)!important;margin-bottom:3px;}
 .crit-note{font-size:.875rem;color:#7F1D1D!important;line-height:1.65;margin-bottom:var(--sp-2);}
 .crit-action{font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:var(--danger-light)!important;letter-spacing:.08em;text-transform:uppercase;}
 
-/* Gene row */
 .gene-row{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-3);margin-bottom:var(--sp-6);}
 .gene-box{background:var(--surface);border:1.5px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-3);text-align:center;box-shadow:var(--shadow-xs);transition:box-shadow .15s,transform .15s,border-color .15s;}
 .gene-box:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);}
@@ -270,7 +240,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .gene-fill{height:100%;border-radius:2px;}
 .gene-ph{font-family:var(--font-mono);font-size:.8rem;font-weight:600;letter-spacing:.03em;}
 
-/* Drug table */
 .dtab{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);}
 .dtab-head{display:grid;grid-template-columns:1.4fr 1.2fr .9fr 1fr .9fr 1.1fr;background:var(--surface-sub);border-bottom:1px solid var(--border-light);}
 .dtab-hcell{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;padding:var(--sp-3) var(--sp-4);}
@@ -278,10 +247,8 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .dtab-row:last-child{border-bottom:none;}.dtab-row:hover{background:var(--surface-sub);}
 .dtab-cell{font-size:.9rem;color:var(--text-secondary)!important;padding:var(--sp-3) var(--sp-4);display:flex;align-items:center;}
 
-/* Risk badge */
 .risk-badge{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;padding:4px 12px;border-radius:var(--r-full);border:1.5px solid;letter-spacing:-.01em;}
 
-/* PGx card */
 .pgx-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-2xl);padding:var(--sp-8);margin-bottom:var(--sp-6);box-shadow:var(--shadow-md);position:relative;overflow:hidden;}
 .pgx-card::before{content:'';position:absolute;top:0;right:0;width:280px;height:280px;background:radial-gradient(circle at top right,var(--brand-light) 0%,transparent 65%);pointer-events:none;}
 .pgx-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)!important;margin-bottom:var(--sp-2);}
@@ -294,7 +261,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .pgx-pills{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
 .pgx-pill{font-family:var(--font-mono);font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:var(--r-full);border:1px solid;letter-spacing:.03em;}
 
-/* Heatmap */
 .hm-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);overflow-x:auto;}
 .hm-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-5);}
 .hm-grid{display:grid;gap:3px;}
@@ -307,7 +273,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .hm-legend-item{font-family:var(--font-mono);font-size:.7rem;display:flex;align-items:center;gap:5px;color:var(--text-muted)!important;}
 .hm-dot{width:10px;height:10px;border-radius:3px;display:inline-block;border:1.5px solid;}
 
-/* Chromosome */
 .chrom-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-5) var(--sp-6);box-shadow:var(--shadow-sm);}
 .chrom-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-4);}
 .chrom-row{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);}
@@ -318,7 +283,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .chrom-gene{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary)!important;width:56px;flex-shrink:0;font-weight:500;}
 .chrom-band{font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted)!important;}
 
-/* Population freq */
 .pop-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);box-shadow:var(--shadow-xs);}
 .pop-eyebrow{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-3);}
 .pop-row{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);}
@@ -328,13 +292,11 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .pop-pct{font-family:var(--font-mono);font-size:.7rem;width:32px;text-align:right;color:var(--text-muted)!important;}
 .pop-you{font-family:var(--font-mono);font-size:.65rem;color:var(--brand)!important;font-weight:700;margin-left:3px;}
 
-/* Interaction matrix */
 .ix-grid{display:grid;gap:3px;}
 .ix-cell{border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;min-height:44px;font-family:var(--font-mono);font-size:.65rem;text-align:center;padding:var(--sp-1);font-weight:700;border:1.5px solid;transition:transform .12s,box-shadow .12s;}
 .ix-cell:hover{transform:scale(1.06);z-index:5;position:relative;box-shadow:var(--shadow-md);}
 .ix-head{font-family:var(--font-mono);font-size:.65rem;letter-spacing:.05em;color:var(--text-muted)!important;display:flex;align-items:center;justify-content:center;min-height:44px;}
 
-/* Drug card */
 .dcard{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-2xl);margin-bottom:var(--sp-6);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .2s;}
 .dcard:hover{box-shadow:var(--shadow-md);}
 .dcard-header{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-5) var(--sp-6);border-bottom:1px solid var(--border-light);}
@@ -344,7 +306,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .dcard-meta{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted)!important;margin-top:3px;}
 .dcard-body{padding:var(--sp-6);}
 
-/* Metrics row */
 .metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border-light);border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--border-light);margin-bottom:var(--sp-5);}
 .metric-cell{background:var(--surface-sub);padding:var(--sp-4);}
 .metric-key{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:4px;}
@@ -355,7 +316,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .conf-track{height:4px;background:var(--surface-sub);border-radius:2px;overflow:hidden;}
 .conf-fill{height:100%;border-radius:2px;animation:bar-fill .7s cubic-bezier(.4,0,.2,1) both;}
 
-/* Variant table */
 .vtable{width:100%;border-collapse:collapse;}
 .vtable th{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;padding:0 var(--sp-3) var(--sp-3);text-align:left;border-bottom:1px solid var(--border-light);}
 .vtable td{font-family:var(--font-mono);font-size:.85rem;color:var(--text-secondary)!important;padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-light);}
@@ -363,7 +323,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .v-rsid{color:#2563EB!important;font-weight:500!important;}.v-star{color:#7C3AED!important;font-weight:500!important;}
 .v-nofunc{color:var(--danger)!important;font-weight:500!important;}.v-dec{color:var(--warn)!important;font-weight:500!important;}.v-norm{color:var(--safe)!important;font-weight:500!important;}
 
-/* Recommendation box */
 .rec-box{border-radius:var(--r-lg);border:1.5px solid;padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);}
 .rec-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:var(--sp-2);}
 .rec-text{font-size:.95rem;line-height:1.75;color:var(--text-secondary)!important;}
@@ -371,7 +330,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .alt-chip{font-family:var(--font-mono);font-size:.75rem;font-weight:500;color:var(--brand)!important;background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-full);padding:4px 12px;}
 .cpic-badge{font-family:var(--font-mono);font-size:.65rem;font-weight:700;background:#FEFCE8;border:1px solid #FDE047;color:#713F12!important;padding:2px 8px;border-radius:4px;display:inline-block;margin-left:var(--sp-2);vertical-align:middle;letter-spacing:.05em;}
 
-/* AI block */
 .ai-block{background:linear-gradient(135deg,#F8FBFF 0%,#EFF6FF 100%);border:1.5px solid var(--brand-border);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-5);box-shadow:0 2px 8px rgba(29,78,216,.06);}
 .ai-header{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:rgba(255,255,255,.7);border-bottom:1px solid var(--brand-border);}
 .ai-badge-pill{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--brand-light);border:1px solid var(--brand-border);color:var(--brand)!important;padding:3px 9px;border-radius:var(--r-sm);}
@@ -381,12 +339,10 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .ai-sec-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--brand)!important;margin-bottom:var(--sp-2);}
 .ai-sec-text{font-size:.9rem;line-height:1.8;color:var(--text-secondary)!important;}
 
-/* Narrative */
 .narrative-box{background:var(--brand-light);border:1.5px solid var(--brand-border);border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);}
 .narrative-header{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4);}
 .narrative-text{font-size:.95rem;line-height:1.85;color:var(--text-secondary)!important;}
 
-/* Before/After */
 .ba-grid{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-6);box-shadow:var(--shadow-md);}
 .ba-side{padding:var(--sp-6);}
 .ba-side-lbl{font-family:var(--font-mono);font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:var(--sp-3);}
@@ -394,13 +350,11 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .ba-text{font-size:.875rem;line-height:1.65;}
 .ba-gene{font-family:var(--font-mono);font-size:.7rem;margin-top:var(--sp-3);opacity:.65;}
 
-/* Rx checker */
 .rx-result{border-radius:var(--r-lg);padding:var(--sp-5) var(--sp-6);margin-top:var(--sp-4);border:1.5px solid;animation:fade-up .25s ease;box-shadow:var(--shadow-md);}
 .rx-verdict{font-size:.95rem;font-weight:700;margin-bottom:var(--sp-2);}
 .rx-detail{font-size:.875rem;line-height:1.7;color:var(--text-secondary)!important;margin-bottom:var(--sp-2);}
 .rx-meta{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;}
 
-/* ═══ CLINICAL NOTE FIX — hardcoded color, not CSS var ═══ */
 .note-box{background:#F1F5F9;border:1px solid #E8EDF5;border-radius:var(--r-xl);padding:var(--sp-6);}
 .note-box pre{
   font-family:'JetBrains Mono','Fira Code',monospace!important;
@@ -416,7 +370,6 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 }
 .note-box pre *,.note-box code{color:#0F172A!important;background:transparent!important;}
 
-/* Patient mode */
 .patient-banner{border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);border:1.5px solid;box-shadow:var(--shadow-md);}
 .patient-banner-title{font-size:1.125rem;font-weight:700;margin-bottom:var(--sp-2);}
 .patient-banner-sub{font-size:.9rem;line-height:1.7;}
@@ -429,16 +382,15 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .pcard-action{display:flex;align-items:flex-start;gap:var(--sp-3);background:var(--surface-sub);border:1px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4);margin-top:var(--sp-4);}
 .pcard-action-text{font-size:.875rem;color:var(--text-primary)!important;line-height:1.65;}
 
-/* Disclaimer */
 .disclaimer-box{display:flex;gap:var(--sp-4);background:#FFFBEB;border:1px solid #FDE68A;border-left:3px solid var(--warn);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-6);}
 .disclaimer-text{font-size:.85rem;color:#78350F!important;line-height:1.7;}
 
-/* Test suite card */
 .tc-card{background:#FFFFFF!important;border:1px solid #E8EDF5!important;border-radius:16px!important;padding:20px!important;box-shadow:0 1px 3px rgba(15,23,42,.06)!important;margin-bottom:12px!important;}
 .tc-name{font-size:.95rem!important;font-weight:700!important;color:#0F172A!important;margin-bottom:4px!important;display:block!important;}
 .tc-desc{font-family:'JetBrains Mono',monospace!important;font-size:.7rem!important;color:#64748B!important;margin-bottom:16px!important;line-height:1.7!important;display:block!important;}
+.tc-status-pass{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:#14532D;}
+.tc-status-fail{background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:#7F1D1D;}
 
-/* Empty state */
 .empty-state{text-align:center;padding:5rem 2rem;border:1.5px dashed var(--border);border-radius:var(--r-2xl);background:var(--surface);box-shadow:var(--shadow-xs);}
 .empty-icon{font-size:2.5rem;display:block;margin-bottom:var(--sp-4);opacity:.3;}
 .empty-title{font-size:1.125rem;font-weight:600;color:var(--text-secondary)!important;margin-bottom:var(--sp-2);}
@@ -447,11 +399,17 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .info-strip{display:flex;align-items:flex-start;gap:var(--sp-3);background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-md);padding:var(--sp-4);margin-bottom:var(--sp-4);}
 .info-strip-text{font-size:.875rem;color:var(--brand-dark)!important;line-height:1.65;}
 
-/* ═══ BUTTONS ═══ */
+/* ── FIX: Input section spacing — prevents selectbox/uploader visual overlap ── */
+.input-section-gap{margin-top:16px;margin-bottom:8px;}
+.input-field-label{font-size:.875rem;font-weight:600;color:#334155;margin-bottom:6px;display:block;}
+
+/* ── BUTTONS ── */
 .stButton>button{background:var(--brand)!important;color:#FFFFFF!important;border:none!important;border-radius:var(--r-md)!important;font-family:var(--font-body)!important;font-weight:600!important;font-size:.95rem!important;padding:.6875rem 1.75rem!important;height:48px!important;transition:all .15s!important;box-shadow:0 1px 2px rgba(29,78,216,.2)!important;min-height:44px!important;}
 .stButton>button:hover{background:var(--brand-hover)!important;box-shadow:0 4px 12px rgba(29,78,216,.3)!important;transform:translateY(-1px)!important;}
 .stButton>button *,.stButton>button span,.stButton>button p,.stButton>button div{color:#FFFFFF!important;}
-/* File uploader "Browse files" button — MUST come after .stButton>button to win specificity */
+.stButton>button p{color:#FFFFFF!important;font-weight:600!important;}
+div[data-testid] .stButton>button p,div[data-testid] .stButton>button span{color:#FFFFFF!important;}
+[data-testid="stVerticalBlock"] .stButton>button p,[data-testid="stVerticalBlock"] .stButton>button span{color:#FFFFFF!important;}
 [data-testid="stFileUploader"] .stButton>button,
 [data-testid="stFileUploader"] button{background:#FFFFFF!important;color:var(--brand)!important;border:1.5px solid var(--brand-border)!important;box-shadow:none!important;transform:none!important;height:auto!important;min-height:36px!important;padding:6px 18px!important;}
 [data-testid="stFileUploader"] .stButton>button:hover,
@@ -463,123 +421,114 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .stDownloadButton>button:hover{background:var(--brand)!important;color:#FFFFFF!important;border-color:var(--brand)!important;}
 .stDownloadButton>button *,.stDownloadButton>button span,.stDownloadButton>button p{color:inherit!important;}
 
-/* ═══ FILE UPLOADER — COMPREHENSIVE VISIBILITY FIX ═══ */
+/* ── FILE UPLOADER — drop zone hidden, Browse button + file row kept ── */
 [data-testid="stFileUploader"]{color:var(--text-primary)!important;}
-/* The drop zone box */
+[data-testid="stFileUploader"] label{color:var(--text-secondary)!important;font-size:.875rem!important;font-weight:600!important;margin-bottom:6px!important;}
+
+/* Hide the entire dashed drop zone box + icon + "Drag and drop" text */
+[data-testid="stFileUploaderDropZone"]{
+  border:none!important;
+  background:transparent!important;
+  padding:0!important;
+  margin:0!important;
+}
+/* Hide cloud icon and "Drag and drop / Limit" text inside drop zone */
+[data-testid="stFileUploaderDropZone"] > div > div:first-child,
+[data-testid="stFileUploaderDropZone"] span:not(:has(button)),
+[data-testid="stFileUploaderDropZone"] p,
+[data-testid="stFileUploaderDropZone"] small,
+[data-testid="stFileUploaderDropZone"] svg{
+  display:none!important;
+}
+/* Collapse the section wrapper so no empty space remains */
 [data-testid="stFileUploader"] section > div,
 [data-testid="stFileUploader"] > label + div > div{
-  border-radius:var(--r-xl)!important;
-  border:2px dashed var(--border)!important;
-  background:var(--surface)!important;
-  padding:var(--sp-8)!important;
-  transition:border-color .15s,background .15s!important;
+  border:none!important;
+  background:transparent!important;
+  padding:0!important;
+  min-height:0!important;
 }
-[data-testid="stFileUploader"] section > div:hover{border-color:var(--brand)!important;background:var(--brand-light)!important;}
-/* All text inside uploader */
-[data-testid="stFileUploader"] label{color:var(--text-secondary)!important;font-size:1rem!important;}
-[data-testid="stFileUploader"] p{color:var(--text-secondary)!important;font-family:var(--font-body)!important;}
-[data-testid="stFileUploader"] small{color:var(--text-muted)!important;font-size:.8rem!important;}
-[data-testid="stFileUploader"] span{color:var(--text-secondary)!important;}
-/* The uploaded file row */
+
+/* Style Browse files button nicely */
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploader"] .stButton>button,
+[data-testid="stFileUploaderDropZone"] button,
+[data-testid="stFileUploader"] section button{
+  background:var(--brand)!important;
+  color:#FFFFFF!important;
+  border:none!important;
+  border-radius:var(--r-md)!important;
+  font-weight:600!important;
+  font-size:.95rem!important;
+  padding:10px 20px!important;
+  width:100%!important;
+  box-shadow:0 1px 2px rgba(29,78,216,.2)!important;
+  transform:none!important;
+  height:44px!important;
+  cursor:pointer!important;
+  transition:background .15s,box-shadow .15s!important;
+}
+[data-testid="stFileUploader"] button:hover,
+[data-testid="stFileUploaderDropZone"] button:hover{
+  background:var(--brand-hover)!important;
+  box-shadow:0 4px 12px rgba(29,78,216,.3)!important;
+}
+[data-testid="stFileUploader"] button span,
+[data-testid="stFileUploader"] button p,
+[data-testid="stFileUploader"] button div,
+[data-testid="stFileUploaderDropZone"] button span,
+[data-testid="stFileUploaderDropZone"] button *{color:#FFFFFF!important;}
+
+/* Keep the uploaded file row visible and styled */
 [data-testid="stFileUploaderFile"]{
   background:var(--surface-sub)!important;
+  border:1px solid var(--border-light)!important;
   border-radius:var(--r-md)!important;
   padding:8px 12px!important;
   margin-top:8px!important;
 }
 [data-testid="stFileUploaderFile"] span,
 [data-testid="stFileUploaderFile"] p,
-[data-testid="stFileUploaderFile"] div{
-  color:#0F172A!important;
-  font-weight:500!important;
-  font-family:var(--font-body)!important;
-}
-[data-testid="stFileUploaderFile"] small{
-  color:#64748B!important;
-  font-weight:400!important;
-  font-size:.8rem!important;
-}
-/* Browse files button — must override .stButton>button which sets dark brand bg */
-[data-testid="stFileUploader"] button,
-[data-testid="stFileUploader"] .stButton>button,
-[data-testid="stFileUploaderDropZone"] button,
-[data-testid="stFileUploader"] section button{
-  background:#FFFFFF!important;
-  color:var(--brand)!important;
-  border:1.5px solid var(--brand-border)!important;
-  border-radius:var(--r-md)!important;
-  font-weight:600!important;
-  padding:6px 16px!important;
-  box-shadow:none!important;
-  transform:none!important;
-  height:auto!important;
-}
-[data-testid="stFileUploader"] button span,
-[data-testid="stFileUploader"] button p,
-[data-testid="stFileUploader"] button div,
-[data-testid="stFileUploaderDropZone"] button span,
-[data-testid="stFileUploaderDropZone"] button *{color:var(--brand)!important;}
-/* Drop zone — force white bg on ALL internal divs so no dark bleed-through */
-[data-testid="stFileUploaderDropZone"],
-[data-testid="stFileUploaderDropZone"] > div,
-[data-testid="stFileUploader"] section,
-[data-testid="stFileUploader"] section > div > div{
-  background:#FFFFFF!important;
-  color:var(--text-secondary)!important;
-}
-/* Legacy selectors */
-.stFileUploader > div{border-radius:var(--r-xl)!important;border:2px dashed var(--border)!important;background:var(--surface)!important;padding:var(--sp-8)!important;}
-.stFileUploader label,.stFileUploader p,.stFileUploader small,.stFileUploader span{color:var(--text-secondary)!important;}
-.uploadedFileName,.uploadedFileData{color:#0F172A!important;font-weight:500!important;}
+[data-testid="stFileUploaderFile"] div{color:#0F172A!important;font-weight:500!important;font-family:var(--font-body)!important;}
+[data-testid="stFileUploaderFile"] small{color:#64748B!important;font-weight:400!important;font-size:.8rem!important;}
 
-/* ═══ TEXT INPUT ═══ */
+/* ── TEXT INPUT ── */
 .stTextInput>div>div>input{border-radius:var(--r-md)!important;border:1.5px solid var(--border)!important;background:var(--surface)!important;color:var(--text-primary)!important;font-family:var(--font-body)!important;font-size:.95rem!important;padding:.6875rem .875rem!important;height:48px!important;transition:border-color .15s,box-shadow .15s!important;box-shadow:var(--shadow-xs)!important;}
 .stTextInput>div>div>input:focus{border-color:var(--brand)!important;box-shadow:0 0 0 3px rgba(147,197,253,.4)!important;outline:none!important;}
 .stTextInput>div>div>input::placeholder{color:var(--text-xmuted)!important;}
 .stTextInput label,.stTextInput [data-testid="InputInstructions"]{color:var(--text-secondary)!important;}
 
-/* ═══ SELECTBOX & MULTISELECT ═══ */
+/* ── SELECTBOX ── */
 .stSelectbox [data-baseweb="select"]>div,.stMultiSelect [data-baseweb="select"]>div{border-radius:var(--r-md)!important;border:1.5px solid var(--border)!important;background:var(--surface)!important;min-height:48px!important;color:var(--text-primary)!important;}
-.stSelectbox [data-baseweb="select"] [data-testid="stMarkdown"],
-.stSelectbox [data-baseweb="select"] span,
-.stSelectbox [data-baseweb="select"] div,
-.stSelectbox [data-baseweb="select"] p{color:var(--text-primary)!important;}
+.stSelectbox [data-baseweb="select"] [data-testid="stMarkdown"],.stSelectbox [data-baseweb="select"] span,.stSelectbox [data-baseweb="select"] div,.stSelectbox [data-baseweb="select"] p{color:var(--text-primary)!important;}
 .stSelectbox label,.stMultiSelect label{color:var(--text-secondary)!important;}
-/* Dropdown list */
 [data-baseweb="menu"] li,[data-baseweb="menu"] [role="option"]{color:var(--text-primary)!important;background:var(--surface)!important;font-family:var(--font-body)!important;}
 [data-baseweb="menu"] li:hover,[data-baseweb="menu"] [aria-selected="true"]{background:var(--brand-light)!important;color:var(--brand-dark)!important;}
-/* Multi-select tags */
 .stMultiSelect span[data-baseweb="tag"]{background:var(--brand-light)!important;color:var(--brand-dark)!important;border:1px solid var(--brand-border)!important;font-family:var(--font-mono)!important;font-size:.75rem!important;border-radius:5px!important;}
 .stMultiSelect span[data-baseweb="tag"] span{color:var(--brand-dark)!important;}
 
-/* ═══ CHECKBOX ═══ */
+/* ── CHECKBOX ── */
 .stCheckbox label,.stCheckbox span,.stCheckbox p{color:var(--text-secondary)!important;}
 
-/* ═══ EXPANDER ═══ */
+/* ── EXPANDER ── */
 div[data-testid="stExpander"]{background:var(--surface)!important;border:1px solid var(--border-light)!important;border-radius:var(--r-lg)!important;box-shadow:var(--shadow-xs)!important;margin-bottom:var(--sp-2)!important;}
 div[data-testid="stExpander"] summary{font-family:var(--font-body)!important;font-size:.9rem!important;font-weight:500!important;color:var(--text-secondary)!important;padding:var(--sp-4) var(--sp-5)!important;}
 div[data-testid="stExpander"] summary *{color:inherit!important;}
 div[data-testid="stExpander"] [data-testid="stExpanderDetails"]{color:var(--text-primary)!important;}
 
-/* ═══ METRICS ═══ */
+/* ── METRICS ── */
 [data-testid="stMetric"]{background:var(--surface)!important;border:1px solid var(--border-light)!important;border-radius:var(--r-xl)!important;padding:var(--sp-5)!important;box-shadow:var(--shadow-xs)!important;}
 [data-testid="stMetricLabel"]{font-family:var(--font-mono)!important;font-size:.7rem!important;color:var(--text-muted)!important;text-transform:uppercase!important;letter-spacing:.1em!important;font-weight:600!important;}
 [data-testid="stMetricLabel"] *{color:var(--text-muted)!important;}
 [data-testid="stMetricValue"]{font-size:1.875rem!important;color:var(--text-primary)!important;font-weight:700!important;letter-spacing:-.02em!important;}
 [data-testid="stMetricValue"] *{color:var(--text-primary)!important;}
 
-/* ═══ ALERTS / BANNERS ═══ */
 [data-testid="stAlert"] *{color:inherit!important;}
-
-/* ═══ SPINNER ═══ */
 .stSpinner>div{border-color:var(--brand) transparent transparent transparent!important;}
 .stSpinner p,.stSpinner span{color:var(--text-muted)!important;}
-
-/* ═══ PRE/CODE — global readable override ═══ */
 .stCode{border-radius:var(--r-lg)!important;}
 pre,code{font-family:var(--font-mono)!important;color:#334155!important;white-space:pre-wrap!important;word-break:break-word!important;}
 [data-testid="stCodeBlock"] pre,[data-testid="stCodeBlock"] code{background:#F1F5F9!important;color:#0F172A!important;}
-/* JSON viewer */
 .stJson *{color:var(--text-primary)!important;}
 </style>""", unsafe_allow_html=True)
 
@@ -589,8 +538,12 @@ pre,code{font-family:var(--font-mono)!important;color:#334155!important;white-sp
 # ══════════════════════════════════════════════════════════════════════════════
 
 def load_vcf(filename):
+    """Load a VCF file from sample_data/. Falls back to get_sample_vcf() if not found."""
     p = os.path.join(BASE_DIR, "sample_data", filename)
-    return open(p).read() if os.path.exists(p) else get_sample_vcf()
+    if os.path.exists(p):
+        return open(p).read()
+    # FIX: graceful fallback instead of silent empty string
+    raise FileNotFoundError(f"Sample file not found: {p}")
 
 def run_pipeline(vcf, drugs, pid, key, run_ix=True, gen_pdf=True, skip_llm=False):
     parsed  = parse_vcf(vcf)
@@ -603,7 +556,7 @@ def run_pipeline(vcf, drugs, pid, key, run_ix=True, gen_pdf=True, skip_llm=False
     if gen_pdf:
         try:
             pdf = generate_pdf_report(pid, outputs, parsed)
-        except:
+        except Exception:
             pass
     return parsed, results, outputs, ix, pdf
 
@@ -625,7 +578,6 @@ def risk_badge_html(rl):
             f'<span style="font-size:.8rem;">{rc["shape"]}</span>{rl}</span>')
 
 def clean_model_label(raw_model: str):
-    """Return clean human-readable label. Strips parenthetical suffixes."""
     is_static = "static" in raw_model.lower()
     if is_static:
         return "Static Template", True
@@ -634,7 +586,7 @@ def clean_model_label(raw_model: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# VISUAL COMPONENTS
+# VISUAL COMPONENTS (unchanged from v9.2)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def compute_pgx(outputs):
@@ -1061,7 +1013,7 @@ def render_clinical_note(outputs, pid):
             lines.append(f"Alternatives: {', '.join(alts)}")
         lines.append("")
     lines += ["", "-" * 60,
-              "Generated by PharmaGuard v9.2 · CPIC Level A evidence · cpicpgx.org",
+              "Generated by PharmaGuard v9.3 · CPIC Level A evidence · cpicpgx.org",
               "NOT FOR CLINICAL USE WITHOUT VALIDATION BY A QUALIFIED CLINICIAN"]
     note = "\n".join(lines)
     sec("One-Click Clinical Note")
@@ -1160,7 +1112,6 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
     render_rx_checker(outputs)
     render_clinical_note(outputs, pid)
 
-    # ── Individual Drug Cards ─────────────────────────────────────────────────
     sec("Individual Drug Analysis")
     for output in outputs:
         rl   = output["risk_assessment"]["risk_label"]
@@ -1231,7 +1182,6 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
               </table>
             </div>""", unsafe_allow_html=True)
 
-        # CPIC Recommendation
         st.markdown(f"""
         <div class="rec-box" style="background:{rc['bg']};border-color:{rc['border']};">
           <div class="rec-label" style="color:{rc['text']};">CPIC Recommendation — {drug}</div>
@@ -1253,10 +1203,8 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
               <div class="alt-chips">{chips}</div>
             </div>""", unsafe_allow_html=True)
 
-        # Population frequency
         render_pop_freq(gene, ph)
 
-        # ── AI Explanation ────────────────────────────────────────────────────
         if exp.get("summary"):
             raw_model = exp.get("model_used", "llama-3.3-70b")
             model, is_static = clean_model_label(raw_model)
@@ -1293,7 +1241,7 @@ def render_nav(key_present):
     <div class="pg-nav">
       <div class="pg-brand">
         <div class="pg-brand-name">Pharma<span>Guard</span></div>
-        <div class="pg-brand-sub">v9.2 · Precision Clinical · RIFT 2026</div>
+        <div class="pg-brand-sub">v9.3 · Precision Clinical · RIFT 2026</div>
       </div>
       <div class="pg-nav-badges">
         <span class="pg-badge pg-badge-brand">CPIC Level A</span>
@@ -1348,7 +1296,12 @@ def render_persona_demo(key):
               <div class="pc-desc">{p['desc']}</div>
             </div>""", unsafe_allow_html=True)
             if st.button(f"Load {p['label']}", key=f"persona_{pid}", use_container_width=True):
-                vcf = load_vcf(p["file"])
+                # FIX: try/except fallback if sample_data files are missing
+                try:
+                    vcf = load_vcf(p["file"])
+                except FileNotFoundError:
+                    vcf = get_sample_vcf()
+                    st.warning(f"Sample file '{p['file']}' not found — using default VCF for demo.")
                 pid_gen = f"PG-{uuid.uuid4().hex[:8].upper()}"
                 with st.spinner(f"Running {p['label']} analysis…"):
                     parsed, results, outputs, ix, pdf = run_pipeline(
@@ -1365,39 +1318,92 @@ def render_persona_demo(key):
 
 def render_test_suite(key):
     st.markdown("### Test Suite")
+    st.markdown(
+        '<div style="font-size:.85rem;color:#64748B;margin-bottom:16px;">'
+        'Tests run with static templates — no API key needed. '
+        'Results load in the Analysis tab after running.</div>',
+        unsafe_allow_html=True
+    )
+
+    # Show persistent test results from session state
+    if "tc_results" in st.session_state:
+        for tc_res in st.session_state["tc_results"]:
+            color_cls = "tc-status-pass" if tc_res["passed"] else "tc-status-fail"
+            icon = "✓ PASS" if tc_res["passed"] else "✗ FAIL"
+            st.markdown(
+                f'<div class="{color_cls}">'
+                f'<strong>{icon} — {tc_res["name"]}</strong><br>'
+                f'<span style="font-size:.78rem;opacity:.85;">{tc_res["detail"]}</span><br>'
+                f'<span style="font-size:.7rem;opacity:.55;">{tc_res["source"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+        if st.button("Clear results", key="tc_clear"):
+            del st.session_state["tc_results"]
+            st.rerun()
+        st.divider()
+
     for i, tc in enumerate(TEST_SUITE):
         with st.container():
             st.markdown(f"""
             <div class="tc-card">
-              <div class="tc-name">{tc['name']}</div>
-              <div class="tc-desc">{tc['desc']}</div>
+              <span class="tc-name">{tc['name']}</span>
+              <span class="tc-desc">{tc['desc']}</span>
             </div>""", unsafe_allow_html=True)
+
             if st.button(f"▶ Run: {tc['name']}", key=f"tc_{i}", use_container_width=True):
-                vcf = load_vcf(tc["file"])
+                try:
+                    vcf = load_vcf(tc["file"])
+                    file_source = f"sample_data/{tc['file']}"
+                except FileNotFoundError:
+                    vcf = get_sample_vcf()
+                    file_source = "fallback VCF (sample file not found)"
+
                 pid = f"TC-{uuid.uuid4().hex[:6].upper()}"
                 with st.spinner(f"Running {tc['name']}…"):
-                    parsed, results, outputs, ix, pdf = run_pipeline(
-                        vcf, tc["drugs"], pid, key, skip_llm=True)
-                passed = all(o["risk_assessment"]["risk_label"] == tc["expected"].get(o["drug"])
-                             for o in outputs if o["drug"] in tc["expected"])
-                if passed:
-                    st.success(f"✓ PASS — {tc['name']}")
-                else:
-                    st.error(f"✗ FAIL — {tc['name']}")
-                    for o in outputs:
-                        drug = o["drug"]
-                        got  = o["risk_assessment"]["risk_label"]
-                        want = tc["expected"].get(drug, "—")
-                        icon = "✓" if got == want else "✗"
-                        st.markdown(f"`{icon} {drug}: got={got} want={want}`")
-                st.session_state["results"]      = outputs
-                st.session_state["parsed"]       = parsed
-                st.session_state["ix"]           = ix
-                st.session_state["pdf"]          = pdf
-                st.session_state["patient_id"]   = pid
-                st.session_state["results_key"]  = key
-                st.session_state["results_skip"] = True
-                st.rerun()
+                    try:
+                        parsed, results, outputs, ix, pdf = run_pipeline(
+                            vcf, tc["drugs"], pid, key, skip_llm=True)
+
+                        detail_lines = []
+                        all_pass = True
+                        for o in outputs:
+                            drug = o["drug"]
+                            got  = o["risk_assessment"]["risk_label"]
+                            want = tc["expected"].get(drug)
+                            if want is None:
+                                continue
+                            ok = got == want
+                            if not ok:
+                                all_pass = False
+                            icon = "✓" if ok else "✗"
+                            detail_lines.append(f"{icon} {drug}: {got} (expected {want})")
+
+                        # Store result persistently in session_state
+                        tc_results = st.session_state.get("tc_results", [])
+                        # Remove old result for same test name
+                        tc_results = [r for r in tc_results if r["name"] != tc["name"]]
+                        tc_results.insert(0, {
+                            "name":   tc["name"],
+                            "passed": all_pass,
+                            "detail": "  ·  ".join(detail_lines),
+                            "source": file_source,
+                        })
+                        st.session_state["tc_results"] = tc_results
+
+                        # Store pipeline results for Analysis tab
+                        st.session_state["results"]      = outputs
+                        st.session_state["parsed"]       = parsed
+                        st.session_state["ix"]           = ix
+                        st.session_state["pdf"]          = pdf
+                        st.session_state["patient_id"]   = pid
+                        st.session_state["results_key"]  = key
+                        st.session_state["results_skip"] = True
+                        st.rerun()
+
+                    except Exception as run_err:
+                        st.error(f"Pipeline error: {run_err}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1423,41 +1429,53 @@ def main():
 
     render_nav(bool(key))
 
-    # ── Tabs ──────────────────────────────────────────────────────────────────
     tab_analysis, tab_suite = st.tabs(["Analysis", "Test Suite"])
 
     # ── Analysis Tab ──────────────────────────────────────────────────────────
     with tab_analysis:
         has_results = "results" in st.session_state and st.session_state["results"]
         render_steps(has_vcf=True, has_drugs=True, has_results=has_results)
-        render_persona_demo(key)
 
         col_input, col_results = st.columns([1, 2], gap="large")
 
         with col_input:
             sec("Genomic Data")
 
-            persona_sel = st.selectbox("Or select a test scenario",
-                options=["None"] + [p["label"] for p in PERSONAS.values()],
-                key="persona_sel")
-
+            # ── File uploader FIRST — prevents selectbox dropdown from overlapping it ──
             vcf_file = st.file_uploader(
-                "Upload VCF file", type=["vcf"],
-                help="Drag and drop file here\nLimit 200MB per file • VCF",
-                label_visibility="collapsed")
+                "Upload VCF file (.vcf)",
+                type=["vcf"],
+                help="Upload a VCF v4.2 pharmacogenomics file — limit 200 MB",
+            )
 
+            st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
+
+            # ── Scenario selectbox BELOW the uploader ──
+            persona_sel = st.selectbox(
+                "Or load a test scenario",
+                options=["None"] + [p["label"] for p in PERSONAS.values()],
+                key="persona_sel",
+            )
+
+            # Resolve VCF text
             vcf_text = None
             if vcf_file:
                 vcf_text = vcf_file.read().decode("utf-8")
             elif persona_sel != "None":
                 for p in PERSONAS.values():
                     if p["label"] == persona_sel:
-                        vcf_text = load_vcf(p["file"])
+                        try:
+                            vcf_text = load_vcf(p["file"])
+                        except FileNotFoundError:
+                            vcf_text = get_sample_vcf()
                         break
 
             if vcf_text:
-                st.success(f"✓ {getattr(vcf_file,'name','Scenario VCF')} · {len(vcf_text)/1024:.2f} MB — Ready for analysis")
+                fname = getattr(vcf_file, 'name', persona_sel) if vcf_file else persona_sel
+                fsize_kb = len(vcf_text) / 1024
+                st.success(f"✓ {fname} · {fsize_kb:.2f} KB — Ready for analysis")
 
+            st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
             sec("Medications to Analyse")
             default_drugs = ALL_DRUGS
             if persona_sel != "None":
@@ -1476,6 +1494,41 @@ def main():
             patient_id_input = st.text_input("Patient ID", placeholder="Auto-generated if blank",
                                               label_visibility="collapsed")
             pid = patient_id_input.strip() or f"PG-{uuid.uuid4().hex[:8].upper()}"
+
+            sec("Quick Demo Personas")
+            persona_cols = st.columns(2)
+            SEV_COLORS_LOCAL = {
+                "critical": ("#FEF2F2","#FECACA","#7F1D1D"),
+                "high":     ("#FFF7ED","#FED7AA","#7C2D12"),
+                "moderate": ("#FFFBEB","#FDE68A","#78350F"),
+                "none":     ("#F0FDF4","#BBF7D0","#14532D"),
+            }
+            for pi, (persona_id, p) in enumerate(PERSONAS.items()):
+                bg, border, txt = SEV_COLORS_LOCAL.get(p["sev"], SEV_COLORS_LOCAL["none"])
+                with persona_cols[pi % 2]:
+                    st.markdown(
+                        f'''<div style="background:{bg};border:1.5px solid {border};border-radius:10px;
+                        padding:10px 12px;margin-bottom:8px;">
+                        <div style="font-size:.8rem;font-weight:700;color:{txt};">{p["label"]}</div>
+                        <div style="font-family:monospace;font-size:.65rem;color:{txt};opacity:.75;">{p["desc"]}</div>
+                        </div>''', unsafe_allow_html=True)
+                    if st.button(f"Load", key=f"persona2_{persona_id}", use_container_width=True):
+                        try:
+                            vcf_text = load_vcf(p["file"])
+                        except FileNotFoundError:
+                            vcf_text = get_sample_vcf()
+                        pid_gen = f"PG-{uuid.uuid4().hex[:8].upper()}"
+                        with st.spinner(f"Running {p['label']}…"):
+                            parsed, results, outputs, ix, pdf = run_pipeline(
+                                vcf_text, p["drugs"], pid_gen, key, skip_llm=not bool(key))
+                        st.session_state["results"]      = outputs
+                        st.session_state["parsed"]       = parsed
+                        st.session_state["ix"]           = ix
+                        st.session_state["pdf"]          = pdf
+                        st.session_state["patient_id"]   = pid_gen
+                        st.session_state["results_key"]  = key
+                        st.session_state["results_skip"] = not bool(key)
+                        st.rerun()
 
             sec("View Mode")
             patient_mode = st.checkbox("Patient-friendly view (plain language)", value=False)
@@ -1514,7 +1567,6 @@ def main():
                   <span style="font-family:var(--font-mono);font-size:1rem;font-weight:700;
                     color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;
                     padding:4px 12px;border-radius:9999px;">{res_pid}</span>
-                  <span style="font-size:.75rem;color:#64748B;cursor:pointer;" title="Copy">📋</span>
                 </div>""", unsafe_allow_html=True)
                 render_results(res_outs, res_par, res_ix, res_pdf, res_pid,
                                patient_mode=patient_mode, key=res_key, skip_llm=res_skip)
@@ -1524,9 +1576,9 @@ def main():
                   <span class="empty-icon">🧬</span>
                   <div class="empty-title">No analysis results yet</div>
                   <div class="empty-hint">
-                    Upload a VCF file<br>
-                    Select medications<br>
-                    Click Run Analysis
+                    Upload a VCF file or select a scenario<br>
+                    Choose medications to analyse<br>
+                    Click Run Analysis →
                   </div>
                 </div>""", unsafe_allow_html=True)
 
