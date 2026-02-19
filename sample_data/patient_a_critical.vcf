@@ -1,17 +1,17 @@
 ##fileformat=VCFv4.2
 ##fileDate=20260219
-##source=PharmaGuardSampleData
 ##reference=GRCh38
-##assembly=GRCh38.p14
+##FILTER=<ID=PASS,Description="All filters passed">
 ##INFO=<ID=GENE,Number=1,Type=String,Description="Gene symbol">
 ##INFO=<ID=STAR,Number=1,Type=String,Description="Star allele designation">
-##INFO=<ID=FUNCTION,Number=1,Type=String,Description="Predicted functional status of variant">
-##INFO=<ID=RS,Number=1,Type=String,Description="dbSNP rsID">
-##INFO=<ID=CPIC,Number=1,Type=String,Description="CPIC evidence level">
-##SAMPLE=<ID=PATIENT_A,Description="Critical Risk Patient - CYP2D6 PM, DPYD PM, TPMT PM">
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
-chr22	42526694	rs1065852	G	A	99	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function;CPIC=A
-chr22	42524947	rs3892097	C	T	98	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function;CPIC=A
-chr6	18143955	rs1800460	C	T	99	PASS	GENE=TPMT;STAR=*3B;FUNCTION=no_function;CPIC=A
-chr1	97915614	rs3918290	C	T	99	PASS	GENE=DPYD;STAR=*2A;FUNCTION=no_function;CPIC=A
-chr1	97981395	rs55886062	A	T	97	PASS	GENE=DPYD;STAR=*13;FUNCTION=no_function;CPIC=A
+##INFO=<ID=FUNCTION,Number=1,Type=String,Description="Functional status">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	PATIENT_A
+chr22	42522613	rs3892097	C	T	100	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function	GT:DP:GQ	1/1:48:99
+chr22	42524217	rs1065852	G	A	98	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function	GT:DP:GQ	1/1:51:99
+chr1	97915614	rs3918290	C	T	100	PASS	GENE=DPYD;STAR=*2A;FUNCTION=no_function	GT:DP:GQ	1/1:60:99
+chr1	97981395	rs55886062	A	T	100	PASS	GENE=DPYD;STAR=*2A;FUNCTION=no_function	GT:DP:GQ	1/1:44:99
+chr6	18143955	rs1800462	G	A	100	PASS	GENE=TPMT;STAR=*3B;FUNCTION=no_function	GT:DP:GQ	1/1:62:99
+chr6	18144508	rs1142345	C	T	100	PASS	GENE=TPMT;STAR=*3C;FUNCTION=no_function	GT:DP:GQ	1/1:57:99

@@ -1,14 +1,13 @@
 ##fileformat=VCFv4.2
 ##fileDate=20260219
-##source=PharmaGuardSampleData
 ##reference=GRCh38
-##assembly=GRCh38.p14
+##FILTER=<ID=PASS,Description="All filters passed">
 ##INFO=<ID=GENE,Number=1,Type=String,Description="Gene symbol">
 ##INFO=<ID=STAR,Number=1,Type=String,Description="Star allele designation">
-##INFO=<ID=FUNCTION,Number=1,Type=String,Description="Predicted functional status of variant">
-##INFO=<ID=RS,Number=1,Type=String,Description="dbSNP rsID">
-##INFO=<ID=CPIC,Number=1,Type=String,Description="CPIC evidence level">
-##SAMPLE=<ID=PATIENT_C,Description="Drug Interaction Patient - CYP2C19 *2/*3 Poor Metabolizer">
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
-chr22	42522613	rs4244285	G	A	100	PASS	GENE=CYP2C19;STAR=*2;FUNCTION=no_function;CPIC=A
-chr22	42523943	rs4986893	G	A	99	PASS	GENE=CYP2C19;STAR=*3;FUNCTION=no_function;CPIC=A
+##INFO=<ID=FUNCTION,Number=1,Type=String,Description="Functional status">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	PATIENT_C
+chr10	96741053	rs4244285	G	A	100	PASS	GENE=CYP2C19;STAR=*2;FUNCTION=no_function	GT:DP:GQ	0/1:60:99
+chr10	96615962	rs4986893	G	A	100	PASS	GENE=CYP2C19;STAR=*3;FUNCTION=no_function	GT:DP:GQ	0/1:58:99
