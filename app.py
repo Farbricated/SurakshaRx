@@ -48,11 +48,11 @@ st.markdown("""
 
 html, body, [class*="css"] {
     font-family: 'Geist', -apple-system, sans-serif !important;
-    background: #fafafa !important;
-    color: #111 !important;
+    background: #0a0a0a !important;
+    color: #f0f0f0 !important;
     font-size: 16px !important;
 }
-.stApp { background: #fafafa !important; }
+.stApp { background: #0a0a0a !important; }
 .main .block-container {
     padding: 0 3rem 6rem !important;
     max-width: 1120px !important;
@@ -63,13 +63,13 @@ html, body, [class*="css"] {
 .pg-nav {
     padding: 2rem 0 2.5rem;
     display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid #e5e5e5;
+    border-bottom: 1px solid #2a2a2a;
     margin-bottom: 3rem;
 }
 .pg-wordmark {
     font-family: 'Instrument Serif', serif;
     font-size: 1.75rem;
-    color: #111;
+    color: #f0f0f0;
     letter-spacing: -0.02em;
 }
 .pg-wordmark em { font-style: italic; color: #6b7280; }
@@ -79,8 +79,8 @@ html, body, [class*="css"] {
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: #6b7280;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
     padding: 5px 12px;
     border-radius: 100px;
 }
@@ -91,7 +91,7 @@ html, body, [class*="css"] {
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #6b7280;
     margin-bottom: 0.75rem;
 }
 
@@ -109,20 +109,20 @@ html, body, [class*="css"] {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 1px;
-    background: #e5e7eb;
-    border: 1px solid #e5e7eb;
+    background: #1e1e1e;
+    border: 1px solid #1e1e1e;
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 1.5rem;
 }
 .stat-cell {
-    background: #fff;
+    background: #141414;
     padding: 1.35rem 1.5rem;
 }
 .stat-val {
     font-family: 'Instrument Serif', serif;
     font-size: 2.25rem;
-    color: #111;
+    color: #f0f0f0;
     line-height: 1;
     margin-bottom: 0.3rem;
 }
@@ -131,19 +131,19 @@ html, body, [class*="css"] {
     font-size: 0.67rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #525252;
 }
 .stat-sub {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: #4b4b4b;
     margin-top: 0.25rem;
 }
 
 /* ── RISK CARD ── */
 .rcard {
-    border: 1px solid #e5e7eb;
+    border: 1px solid #222;
     border-radius: 12px;
-    background: #fff;
+    background: #111;
     margin-bottom: 1rem;
     overflow: hidden;
 }
@@ -152,7 +152,7 @@ html, body, [class*="css"] {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #1e1e1e;
 }
 .rcard-left { display: flex; align-items: center; gap: 0.875rem; }
 .rcard-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
@@ -160,13 +160,13 @@ html, body, [class*="css"] {
     font-family: 'Geist', sans-serif;
     font-size: 1.1rem;
     font-weight: 600;
-    color: #111;
+    color: #f0f0f0;
     letter-spacing: -0.01em;
 }
 .rcard-meta {
     font-family: 'DM Mono', monospace;
     font-size: 0.72rem;
-    color: #9ca3af;
+    color: #4b4b4b;
     margin-top: 3px;
     letter-spacing: 0.04em;
 }
@@ -187,13 +187,13 @@ html, body, [class*="css"] {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 1px;
-    background: #f3f4f6;
+    background: #1a1a1a;
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 1.35rem;
 }
 .mc-cell {
-    background: #fafafa;
+    background: #0e0e0e;
     padding: 1rem 1.1rem;
 }
 .mc-key {
@@ -201,14 +201,14 @@ html, body, [class*="css"] {
     font-size: 0.63rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #484848;
     margin-bottom: 0.35rem;
 }
 .mc-val {
     font-family: 'Geist', sans-serif;
     font-size: 1.05rem;
     font-weight: 600;
-    color: #111;
+    color: #e8e8e8;
 }
 
 /* ── CONFIDENCE BAR ── */
@@ -219,12 +219,12 @@ html, body, [class*="css"] {
     font-family: 'DM Mono', monospace;
     font-size: 0.68rem;
     letter-spacing: 0.08em;
-    color: #9ca3af;
+    color: #484848;
     margin-bottom: 7px;
 }
 .conf-track {
     height: 3px;
-    background: #f3f4f6;
+    background: #1e1e1e;
     border-radius: 2px;
     overflow: hidden;
 }
@@ -233,7 +233,7 @@ html, body, [class*="css"] {
 /* ── DIVIDER ── */
 .h-rule {
     border: none;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid #1e1e1e;
     margin: 1.35rem 0;
 }
 .inline-label {
@@ -241,7 +241,7 @@ html, body, [class*="css"] {
     font-size: 0.68rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #484848;
     margin-bottom: 0.65rem;
 }
 
@@ -252,17 +252,17 @@ html, body, [class*="css"] {
     font-size: 0.66rem;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #484848;
     padding: 0 0.6rem 0.6rem;
     text-align: left;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #1e1e1e;
 }
 .vtable td {
     font-family: 'DM Mono', monospace;
     font-size: 0.8rem;
-    color: #374151;
+    color: #a0a0a0;
     padding: 0.6rem 0.6rem;
-    border-bottom: 1px solid #f9fafb;
+    border-bottom: 1px solid #1a1a1a;
 }
 .vtable tbody tr:last-child td { border-bottom: none; }
 .v-rsid { color: #2563eb !important; }
@@ -289,7 +289,7 @@ html, body, [class*="css"] {
 .rec-text {
     font-size: 0.975rem;
     line-height: 1.75;
-    color: #374151;
+    color: #b0b0b0;
 }
 
 /* ── ALT DRUGS ── */
@@ -297,24 +297,24 @@ html, body, [class*="css"] {
 .alt-chip {
     font-family: 'DM Mono', monospace;
     font-size: 0.72rem;
-    color: #374151;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    color: #a0a0a0;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
     border-radius: 100px;
     padding: 4px 12px;
 }
 
 /* ── AI BLOCK ── */
 .ai-block {
-    border: 1px solid #e5e7eb;
+    border: 1px solid #222;
     border-radius: 8px;
     overflow: hidden;
     margin-top: 1.35rem;
 }
 .ai-header {
     padding: 0.7rem 1.1rem;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: #0e0e0e;
+    border-bottom: 1px solid #222;
     display: flex;
     align-items: center;
     gap: 0.65rem;
@@ -325,21 +325,21 @@ html, body, [class*="css"] {
     letter-spacing: 0.09em;
     text-transform: uppercase;
     color: #6b7280;
-    background: #e5e7eb;
+    background: #1e1e1e;
     padding: 3px 9px;
     border-radius: 4px;
 }
-.ai-section { padding: 1rem 1.1rem; border-bottom: 1px solid #f3f4f6; }
+.ai-section { padding: 1rem 1.1rem; border-bottom: 1px solid #1e1e1e; }
 .ai-section:last-child { border-bottom: none; }
 .ai-section-label {
     font-family: 'DM Mono', monospace;
     font-size: 0.66rem;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #484848;
     margin-bottom: 0.45rem;
 }
-.ai-section-text { font-size: 0.975rem; line-height: 1.8; color: #374151; }
+.ai-section-text { font-size: 0.975rem; line-height: 1.8; color: #b0b0b0; }
 
 /* ── ALERT ── */
 .alert {
@@ -367,15 +367,15 @@ html, body, [class*="css"] {
     align-items: flex-start;
     gap: 0.875rem;
     padding: 1.1rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #1e1e1e;
     border-radius: 8px;
     margin-bottom: 0.5rem;
-    background: #fff;
+    background: #111;
 }
 .ix-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
-.ix-title { font-size: 0.975rem; font-weight: 600; color: #111; margin-bottom: 0.3rem; }
-.ix-msg { font-size: 0.9rem; color: #6b7280; line-height: 1.65; margin-bottom: 0.45rem; }
-.ix-rec { font-size: 0.875rem; color: #374151; line-height: 1.6; }
+.ix-title { font-size: 0.975rem; font-weight: 600; color: #e8e8e8; margin-bottom: 0.3rem; }
+.ix-msg { font-size: 0.9rem; color: #525252; line-height: 1.65; margin-bottom: 0.45rem; }
+.ix-rec { font-size: 0.875rem; color: #8a8a8a; line-height: 1.6; }
 .ix-sev {
     font-family: 'DM Mono', monospace;
     font-size: 0.65rem;
@@ -392,9 +392,9 @@ html, body, [class*="css"] {
 .empty {
     text-align: center;
     padding: 5rem 2rem;
-    border: 1px dashed #e5e7eb;
+    border: 1px dashed #222;
     border-radius: 12px;
-    background: #fff;
+    background: #0e0e0e;
 }
 .empty-icon {
     font-family: 'Instrument Serif', serif;
@@ -406,29 +406,29 @@ html, body, [class*="css"] {
     font-family: 'Geist', sans-serif;
     font-size: 1.2rem;
     font-weight: 500;
-    color: #9ca3af;
+    color: #333;
     margin-bottom: 0.5rem;
 }
 .empty-hint {
     font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
-    color: #d1d5db;
+    color: #2a2a2a;
     letter-spacing: 0.06em;
     line-height: 2.1;
 }
 
 /* ── TEST CARDS ── */
 .test-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
+    background: #111;
+    border: 1px solid #1e1e1e;
     border-radius: 10px;
     padding: 1.2rem;
 }
-.test-name { font-size: 0.95rem; font-weight: 600; color: #111; margin-bottom: 0.4rem; }
+.test-name { font-size: 0.95rem; font-weight: 600; color: #e0e0e0; margin-bottom: 0.4rem; }
 .test-desc {
     font-family: 'DM Mono', monospace;
     font-size: 0.66rem;
-    color: #9ca3af;
+    color: #3a3a3a;
     letter-spacing: 0.04em;
     margin-bottom: 0.85rem;
     line-height: 1.75;
@@ -437,7 +437,7 @@ html, body, [class*="css"] {
 .test-drug {
     font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
-    color: #9ca3af;
+    color: #3a3a3a;
     width: 90px;
     flex-shrink: 0;
 }
@@ -449,17 +449,17 @@ html, body, [class*="css"] {
 
 /* ── RESULT TABLE ── */
 .rt-wrap {
-    border: 1px solid #e5e7eb;
+    border: 1px solid #1e1e1e;
     border-radius: 10px;
     overflow: hidden;
-    background: #fff;
+    background: #0e0e0e;
     margin-bottom: 1rem;
 }
 .rt-head {
     display: grid;
     grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: #0a0a0a;
+    border-bottom: 1px solid #1e1e1e;
     padding: 0 0.5rem;
 }
 .rt-hcell {
@@ -467,20 +467,20 @@ html, body, [class*="css"] {
     font-size: 0.66rem;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: #9ca3af;
+    color: #484848;
     padding: 0.75rem 0.85rem;
 }
 .rt-row {
     display: grid;
     grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px;
-    border-bottom: 1px solid #f9fafb;
+    border-bottom: 1px solid #141414;
     padding: 0 0.5rem;
 }
 .rt-row:last-child { border-bottom: none; }
 .rt-cell {
     font-family: 'DM Mono', monospace;
     font-size: 0.8rem;
-    color: #374151;
+    color: #909090;
     padding: 0.75rem 0.85rem;
     display: flex;
     align-items: center;
@@ -490,13 +490,13 @@ html, body, [class*="css"] {
 .steps-row {
     display: flex;
     gap: 0;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #1e1e1e;
     border-radius: 10px;
     overflow: hidden;
     margin-bottom: 2.5rem;
-    background: #fff;
+    background: #0e0e0e;
 }
-.step-item { flex: 1; padding: 1rem 1.35rem; border-right: 1px solid #e5e7eb; }
+.step-item { flex: 1; padding: 1rem 1.35rem; border-right: 1px solid #1e1e1e; }
 .step-item:last-child { border-right: none; }
 .step-num {
     font-family: 'DM Mono', monospace;
@@ -506,14 +506,14 @@ html, body, [class*="css"] {
     margin-bottom: 4px;
     text-transform: uppercase;
 }
-.step-label { font-size: 0.9rem; font-weight: 500; color: #d1d5db; }
-.step-item.active .step-num { color: #111; }
-.step-item.active .step-label { color: #111; }
+.step-label { font-size: 0.9rem; font-weight: 500; color: #2a2a2a; }
+.step-item.active .step-num { color: #e0e0e0; }
+.step-item.active .step-label { color: #e0e0e0; }
 
 /* ── STREAMLIT OVERRIDES ── */
 .stButton > button {
-    background: #111 !important;
-    color: #fff !important;
+    background: #f0f0f0 !important;
+    color: #111 !important;
     border: none !important;
     border-radius: 8px !important;
     font-family: 'Geist', sans-serif !important;
@@ -525,19 +525,19 @@ html, body, [class*="css"] {
 }
 .stButton > button:hover { opacity: 0.8 !important; }
 .stDownloadButton > button {
-    background: #fff !important;
-    color: #374151 !important;
-    border: 1px solid #e5e7eb !important;
+    background: #141414 !important;
+    color: #909090 !important;
+    border: 1px solid #2a2a2a !important;
     border-radius: 8px !important;
     font-family: 'DM Mono', monospace !important;
     font-size: 0.75rem !important;
     letter-spacing: 0.04em !important;
     padding: 0.55rem 1.1rem !important;
 }
-.stDownloadButton > button:hover { border-color: #111 !important; color: #111 !important; }
+.stDownloadButton > button:hover { border-color: #f0f0f0 !important; color: #f0f0f0 !important; }
 .stTabs [data-baseweb="tab-list"] {
     background: transparent !important;
-    border-bottom: 1px solid #e5e7eb !important;
+    border-bottom: 1px solid #1e1e1e !important;
     gap: 0 !important;
     padding: 0 !important;
     margin-bottom: 2rem !important;
@@ -548,7 +548,7 @@ html, body, [class*="css"] {
     font-size: 0.72rem !important;
     letter-spacing: 0.1em !important;
     text-transform: uppercase !important;
-    color: #9ca3af !important;
+    color: #3a3a3a !important;
     padding: 0.85rem 1.35rem !important;
     background: transparent !important;
     border: none !important;
@@ -556,14 +556,14 @@ html, body, [class*="css"] {
     border-radius: 0 !important;
 }
 .stTabs [aria-selected="true"] {
-    color: #111 !important;
-    border-bottom-color: #111 !important;
+    color: #f0f0f0 !important;
+    border-bottom-color: #f0f0f0 !important;
     font-weight: 600 !important;
 }
 .stTabs [data-baseweb="tab-panel"] { padding-top: 0 !important; }
 div[data-testid="stExpander"] {
-    background: #fff !important;
-    border: 1px solid #e5e7eb !important;
+    background: #111 !important;
+    border: 1px solid #1e1e1e !important;
     border-radius: 8px !important;
     box-shadow: none !important;
     margin-bottom: 0.5rem !important;
@@ -572,13 +572,13 @@ div[data-testid="stExpander"] summary {
     font-family: 'DM Mono', monospace !important;
     font-size: 0.72rem !important;
     letter-spacing: 0.07em !important;
-    color: #6b7280 !important;
+    color: #444 !important;
     padding: 0.85rem 1.1rem !important;
 }
 .stMultiSelect span[data-baseweb="tag"] {
-    background: #f3f4f6 !important;
-    color: #374151 !important;
-    border: 1px solid #e5e7eb !important;
+    background: #1e1e1e !important;
+    color: #909090 !important;
+    border: 1px solid #2a2a2a !important;
     font-family: 'DM Mono', monospace !important;
     font-size: 0.72rem !important;
     border-radius: 4px !important;
@@ -586,7 +586,7 @@ div[data-testid="stExpander"] summary {
 .stCheckbox label p {
     font-family: 'Geist', sans-serif !important;
     font-size: 0.975rem !important;
-    color: #374151 !important;
+    color: #909090 !important;
 }
 .stTextInput > div > div > input, .stSelectbox > div > div > div {
     border-radius: 8px !important;
@@ -594,23 +594,23 @@ div[data-testid="stExpander"] summary {
     font-family: 'DM Mono', monospace !important;
     font-size: 0.875rem !important;
     background: #fff !important;
-    color: #111 !important;
+    color: #f0f0f0 !important;
 }
-.stTextInput > div > div > input:focus { border-color: #111 !important; box-shadow: none !important; }
+.stTextInput > div > div > input:focus { border-color: #f0f0f0 !important; box-shadow: none !important; }
 .stFileUploader > div {
     border-radius: 8px !important;
     border: 1px dashed #e5e7eb !important;
-    background: #fafafa !important;
+    background: #0a0a0a !important;
 }
 [data-testid="stMetricValue"] {
     font-family: 'Instrument Serif', serif !important;
     font-size: 2.25rem !important;
-    color: #111 !important;
+    color: #f0f0f0 !important;
 }
 [data-testid="stMetricLabel"] {
     font-family: 'DM Mono', monospace !important;
     font-size: 0.67rem !important;
-    color: #9ca3af !important;
+    color: #444 !important;
     letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
 }
@@ -622,8 +622,8 @@ div[data-testid="stExpander"] summary {
 }
 .stSuccess { background: #f0fdf4 !important; border-color: #bbf7d0 !important; color: #166534 !important; }
 .stError   { background: #fef2f2 !important; border-color: #fecaca !important; color: #991b1b !important; }
-[data-testid="stSidebar"] { background: #fff !important; border-right: 1px solid #e5e7eb !important; }
-[data-testid="stSidebar"] * { color: #374151 !important; }
+[data-testid="stSidebar"] { background: #0a0a0a !important; border-right: 1px solid #1e1e1e !important; }
+[data-testid="stSidebar"] * { color: #606060 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -695,7 +695,7 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
     <div class="stat-grid">
       <div class="stat-cell">
         <div class="stat-key">Patient</div>
-        <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:#111;margin-top:4px;">{pid}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.85rem;color:#e0e0e0;margin-top:4px;">{pid}</div>
       </div>
       <div class="stat-cell">
         <div class="stat-key">Overall Risk</div>
@@ -888,7 +888,7 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
               <span style="font-size:0.9rem;">🔬</span>
               <div>
                 <div class="inline-label" style="margin-bottom:0.25rem;">Monitoring</div>
-                <div style="font-size:0.85rem;color:#374151;line-height:1.65;">{monitoring}</div>
+                <div style="font-size:0.85rem;color:#b0b0b0;line-height:1.65;">{monitoring}</div>
               </div>
             </div>""", unsafe_allow_html=True)
 
@@ -1048,7 +1048,7 @@ with tab1:
         st.markdown(f"""
         <div style="display:flex;align-items:baseline;gap:1rem;margin:2.5rem 0 1.5rem;
              padding-bottom:1rem;border-bottom:1px solid #e5e7eb;">
-          <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#111;
+          <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;
                letter-spacing:-0.02em;">Results</div>
           <div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;">{pid}</div>
         </div>""", unsafe_allow_html=True)
@@ -1108,7 +1108,7 @@ RISK_DOT = {
 with tab2:
     st.markdown("""
     <div style="margin-bottom:2rem;">
-      <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#111;
+      <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;
            letter-spacing:-0.02em;margin-bottom:0.4rem;">Test Suite</div>
       <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:#9ca3af;letter-spacing:0.06em;">
         4 scenarios · expected vs actual · pass / fail per drug
@@ -1185,7 +1185,7 @@ with tab2:
                     ok_c  = "#16a34a" if ok else "#dc2626"
                     ok_bg2 = "#f0fdf4" if ok else "#fef2f2"
                     rows_html += f"""<div class="rt-row">
-                      <div class="rt-cell" style="font-weight:600;color:#111;">{drug}</div>
+                      <div class="rt-cell" style="font-weight:600;color:#e0e0e0;">{drug}</div>
                       <div class="rt-cell">
                         <span style="display:inline-flex;align-items:center;gap:6px;">
                           <span style="width:6px;height:6px;border-radius:50%;background:{rc['dot']};flex-shrink:0;"></span>
