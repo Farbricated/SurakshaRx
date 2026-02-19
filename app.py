@@ -1,9 +1,17 @@
 """
-PharmaGuard v9.1 — Precision Clinical Pharmacogenomics
-Fixes applied vs v9.0:
-  BUG 1: AI badge showed raw "static-template-v5 (rate-limited)" → now "Static Template"
-  BUG 2: Clinical Note pre text was invisible → explicit color on pre and .note-box pre
-  BUG 3: File uploader filename/size text invisible → color overrides for inner elements
+PharmaGuard v9.2 — Precision Clinical Pharmacogenomics
+CSS VISIBILITY FIXES vs v9.1:
+  - Explicit color:!important on ALL custom class text elements
+  - File uploader: comprehensive selector coverage for filename/size/buttons
+  - Clinical Note pre block: hardcoded #0F172A color (not var-based)
+  - Sidebar: all child elements forced to readable colors
+  - Selectbox/multiselect: dropdown text, selected values, labels
+  - Tab text spans/divs: inherit fix
+  - Checkbox labels: explicit color
+  - Metric labels/values: explicit color on child elements
+  - Pre/code global: explicit color override
+  - Button text: explicit white on primary, explicit color on download
+  - AI badge: clean model label (strips parenthetical junk)
 """
 
 import streamlit as st
@@ -134,7 +142,18 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CSS — v9.1 (all 3 visibility bugs fixed inline)
+# CSS v9.2 — Comprehensive text visibility fix
+# Key changes vs v9.1:
+#   • All custom classes now have explicit color:!important on text elements
+#   • File uploader: full selector coverage for filename, size, browse button
+#   • Clinical note pre: hardcoded #0F172A (not CSS var which can be overridden)
+#   • Sidebar: all descendants forced readable
+#   • Selectbox dropdown, labels: explicit colors
+#   • Tab content: inherit fix
+#   • Checkbox, radio labels: explicit color
+#   • Metric child elements: explicit color
+#   • Pre/code: global color fix
+#   • Button children: explicit white/inherit
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -155,15 +174,19 @@ st.markdown("""<style>
   --font-mono:'JetBrains Mono','Fira Code',monospace;
 }
 
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+/* ── GLOBAL RESET ── */
+*,*::before,*::after{box-sizing:border-box;}
 html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!important;background:var(--bg)!important;color:var(--text-primary)!important;-webkit-font-smoothing:antialiased!important;}
 .stApp{background:var(--bg)!important;}
 .main .block-container{padding:0 var(--sp-10) var(--sp-16)!important;max-width:1280px!important;}
 #MainMenu,footer,header{visibility:hidden;}
 
+/* Force markdown text readable */
+.stMarkdown,.stMarkdown p,.stMarkdown li,.stMarkdown span{color:var(--text-secondary)!important;}
+[data-testid="stMarkdownContainer"] *{color:inherit;}
+
 @keyframes fade-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
-@keyframes slide-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
 @keyframes pulse-once{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(185,28,28,.3)}40%{transform:scale(1.02);box-shadow:0 0 0 8px rgba(185,28,28,0)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(185,28,28,0)}}
 @keyframes bar-fill{from{width:0!important}}
 @keyframes score-count{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
@@ -175,47 +198,53 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 
 /* Navigation */
 .pg-nav{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-6) 0;border-bottom:1px solid var(--border-light);margin-bottom:var(--sp-8);animation:fade-in .4s ease;}
-.pg-brand-name{font-size:1.5rem;font-weight:700;color:var(--text-primary);letter-spacing:-.03em;line-height:1;}
-.pg-brand-name span{color:var(--brand);}
-.pg-brand-sub{font-family:var(--font-mono);font-size:.8rem;color:var(--text-xmuted);letter-spacing:.1em;text-transform:uppercase;}
+.pg-brand-name{font-size:1.5rem;font-weight:700;color:var(--text-primary)!important;letter-spacing:-.03em;line-height:1;}
+.pg-brand-name span{color:var(--brand)!important;}
+.pg-brand-sub{font-family:var(--font-mono);font-size:.8rem;color:var(--text-xmuted)!important;letter-spacing:.1em;text-transform:uppercase;}
 .pg-nav-badges{display:flex;align-items:center;gap:var(--sp-2);}
 .pg-badge{font-family:var(--font-mono);font-size:.8rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:var(--r-full);border:1px solid;white-space:nowrap;}
-.pg-badge-default{color:var(--text-muted);border-color:var(--border);background:var(--surface);}
-.pg-badge-brand{color:var(--brand);border-color:var(--brand-border);background:var(--brand-light);font-weight:600;}
+.pg-badge-default{color:var(--text-muted)!important;border-color:var(--border);background:var(--surface);}
+.pg-badge-brand{color:var(--brand)!important;border-color:var(--brand-border);background:var(--brand-light);font-weight:600;}
 
 /* Trust strip */
 .trust-strip{display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-3) var(--sp-4);background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-md);margin-bottom:var(--sp-8);}
-.trust-item{display:flex;align-items:center;gap:var(--sp-2);font-size:.85rem;color:var(--brand-dark);font-weight:500;white-space:nowrap;}
+.trust-item{display:flex;align-items:center;gap:var(--sp-2);font-size:.85rem;color:var(--brand-dark)!important;font-weight:500;white-space:nowrap;}
 .trust-sep{width:1px;height:16px;background:var(--brand-border);flex-shrink:0;}
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"]{background:transparent!important;border-bottom:1px solid var(--border-light)!important;gap:0!important;padding:0!important;margin-bottom:var(--sp-8)!important;box-shadow:none!important;}
 .stTabs [data-baseweb="tab"]{font-family:var(--font-body)!important;font-size:1rem!important;font-weight:500!important;color:var(--text-muted)!important;padding:var(--sp-3) var(--sp-5)!important;background:transparent!important;border:none!important;border-bottom:2.5px solid transparent!important;border-radius:0!important;transition:color .15s!important;}
 .stTabs [aria-selected="true"]{color:var(--brand)!important;border-bottom-color:var(--brand)!important;font-weight:600!important;}
-.stTabs [data-baseweb="tab-panel"]{padding-top:0!important;}
+.stTabs [data-baseweb="tab"] span,.stTabs [data-baseweb="tab"] div,.stTabs [data-baseweb="tab"] p{color:inherit!important;}
+.stTabs [data-baseweb="tab-panel"]{padding-top:0!important;background:#FAFBFC!important;}
+.stTabs [data-baseweb="tab-panel"] p,.stTabs [data-baseweb="tab-panel"] div,.stTabs [data-baseweb="tab-panel"] span,.stTabs [data-baseweb="tab-panel"] label{color:#334155!important;}
+.stTabs [data-baseweb="tab-panel"] h1,.stTabs [data-baseweb="tab-panel"] h2,.stTabs [data-baseweb="tab-panel"] h3{color:#0F172A!important;}
 
 /* Sidebar */
 [data-testid="stSidebar"]{background:var(--surface)!important;border-right:1px solid var(--border-light)!important;}
+[data-testid="stSidebar"] *{color:var(--text-primary)!important;}
+[data-testid="stSidebar"] label,[data-testid="stSidebar"] .stMarkdown p{color:var(--text-secondary)!important;}
+[data-testid="stSidebar"] h3,[data-testid="stSidebar"] h4{color:var(--text-primary)!important;font-weight:700!important;}
+[data-testid="stSidebar"] code{color:var(--brand-dark)!important;background:var(--brand-light)!important;padding:1px 5px;border-radius:3px;font-family:var(--font-mono)!important;}
 
 /* Section label */
-.sec-label{display:flex;align-items:center;gap:var(--sp-3);font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--sp-4);}
+.sec-label{display:flex;align-items:center;gap:var(--sp-3);font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-4);}
 .sec-label::after{content:'';flex:1;height:1px;background:var(--border-light);}
 
 /* Steps */
 .steps{display:flex;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-8);box-shadow:var(--shadow-xs);}
 .step{flex:1;padding:var(--sp-4) var(--sp-5);border-right:1px solid var(--border-light);}
 .step:last-child{border-right:none;}
-.step-num{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-xmuted);margin-bottom:3px;}
-.step-lbl{font-size:.875rem;font-weight:500;color:var(--text-muted);}
-.step.done .step-num{color:var(--brand);}.step.done .step-lbl{color:var(--text-primary);font-weight:600;}.step.done{background:#F8FAFF;}
+.step-num{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-xmuted)!important;margin-bottom:3px;}
+.step-lbl{font-size:.875rem;font-weight:500;color:var(--text-muted)!important;}
+.step.done .step-num{color:var(--brand)!important;}.step.done .step-lbl{color:var(--text-primary)!important;font-weight:600;}.step.done{background:#F8FAFF;}
 
 /* Persona cards */
-.persona-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-3);margin-bottom:var(--sp-8);}
 .persona-card{background:var(--surface);border:1.5px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4);transition:all .2s cubic-bezier(.4,0,.2,1);box-shadow:var(--shadow-xs);cursor:pointer;}
 .persona-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--brand-border);}
 .pc-sev{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:600;padding:3px 10px;border-radius:var(--r-full);border:1px solid;margin-bottom:var(--sp-2);}
-.pc-name{font-size:.875rem;font-weight:700;color:var(--text-primary);margin-bottom:3px;}
-.pc-desc{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);line-height:1.7;}
+.pc-name{font-size:.875rem;font-weight:700;color:var(--text-primary)!important;margin-bottom:3px;}
+.pc-desc{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)!important;line-height:1.7;}
 
 /* Risk command center */
 .risk-center{border-radius:var(--r-2xl);padding:var(--sp-8);margin-bottom:var(--sp-6);border:1.5px solid;position:relative;overflow:hidden;box-shadow:var(--shadow-md);}
@@ -228,15 +257,15 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 
 /* Critical alert */
 .crit-alert{display:flex;gap:var(--sp-4);background:#FFF1F2;border:1px solid #FECDD3;border-left:4px solid var(--danger);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);animation:pulse-once .8s ease .3s both;box-shadow:var(--shadow-sm);}
-.crit-title{font-size:.95rem;font-weight:700;color:var(--danger);margin-bottom:3px;}
-.crit-note{font-size:.875rem;color:#7F1D1D;line-height:1.65;margin-bottom:var(--sp-2);}
-.crit-action{font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:var(--danger-light);letter-spacing:.08em;text-transform:uppercase;}
+.crit-title{font-size:.95rem;font-weight:700;color:var(--danger)!important;margin-bottom:3px;}
+.crit-note{font-size:.875rem;color:#7F1D1D!important;line-height:1.65;margin-bottom:var(--sp-2);}
+.crit-action{font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:var(--danger-light)!important;letter-spacing:.08em;text-transform:uppercase;}
 
 /* Gene row */
 .gene-row{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-3);margin-bottom:var(--sp-6);}
 .gene-box{background:var(--surface);border:1.5px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-3);text-align:center;box-shadow:var(--shadow-xs);transition:box-shadow .15s,transform .15s,border-color .15s;}
 .gene-box:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);}
-.gene-nm{font-family:var(--font-mono);font-size:.75rem;font-weight:600;margin-bottom:var(--sp-2);color:var(--text-secondary);}
+.gene-nm{font-family:var(--font-mono);font-size:.75rem;font-weight:600;margin-bottom:var(--sp-2);color:var(--text-secondary)!important;}
 .gene-track{height:3px;border-radius:2px;background:var(--surface-sub);margin:var(--sp-2) 0;overflow:hidden;}
 .gene-fill{height:100%;border-radius:2px;}
 .gene-ph{font-family:var(--font-mono);font-size:.8rem;font-weight:600;letter-spacing:.03em;}
@@ -244,10 +273,10 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 /* Drug table */
 .dtab{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);}
 .dtab-head{display:grid;grid-template-columns:1.4fr 1.2fr .9fr 1fr .9fr 1.1fr;background:var(--surface-sub);border-bottom:1px solid var(--border-light);}
-.dtab-hcell{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding:var(--sp-3) var(--sp-4);}
+.dtab-hcell{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;padding:var(--sp-3) var(--sp-4);}
 .dtab-row{display:grid;grid-template-columns:1.4fr 1.2fr .9fr 1fr .9fr 1.1fr;border-bottom:1px solid var(--border-light);transition:background .12s;}
 .dtab-row:last-child{border-bottom:none;}.dtab-row:hover{background:var(--surface-sub);}
-.dtab-cell{font-size:.9rem;color:var(--text-secondary);padding:var(--sp-3) var(--sp-4);display:flex;align-items:center;}
+.dtab-cell{font-size:.9rem;color:var(--text-secondary)!important;padding:var(--sp-3) var(--sp-4);display:flex;align-items:center;}
 
 /* Risk badge */
 .risk-badge{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;padding:4px 12px;border-radius:var(--r-full);border:1.5px solid;letter-spacing:-.01em;}
@@ -255,55 +284,55 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 /* PGx card */
 .pgx-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-2xl);padding:var(--sp-8);margin-bottom:var(--sp-6);box-shadow:var(--shadow-md);position:relative;overflow:hidden;}
 .pgx-card::before{content:'';position:absolute;top:0;right:0;width:280px;height:280px;background:radial-gradient(circle at top right,var(--brand-light) 0%,transparent 65%);pointer-events:none;}
-.pgx-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);margin-bottom:var(--sp-2);}
+.pgx-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)!important;margin-bottom:var(--sp-2);}
 .pgx-score{font-size:4.5rem;font-weight:700;letter-spacing:-.04em;line-height:1;margin-bottom:4px;animation:score-count .5s cubic-bezier(.4,0,.2,1) .1s both;}
-.pgx-label{font-size:.9rem;color:var(--text-muted);margin-bottom:var(--sp-5);}
+.pgx-label{font-size:.9rem;color:var(--text-muted)!important;margin-bottom:var(--sp-5);}
 .pgx-marker{position:relative;height:6px;background:var(--surface-sub);border-radius:3px;overflow:visible;margin-bottom:var(--sp-5);}
 .pgx-fill{position:absolute;top:0;left:0;height:100%;border-radius:3px;transition:width .9s cubic-bezier(.4,0,.2,1);}
 .pgx-indicator{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:3px solid;transform:translateX(-50%);box-shadow:var(--shadow-sm);transition:left .9s cubic-bezier(.4,0,.2,1);}
-.pgx-thresh-labels{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted);margin-bottom:var(--sp-3);}
+.pgx-thresh-labels{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted)!important;margin-bottom:var(--sp-3);}
 .pgx-pills{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
 .pgx-pill{font-family:var(--font-mono);font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:var(--r-full);border:1px solid;letter-spacing:.03em;}
 
 /* Heatmap */
 .hm-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);overflow-x:auto;}
-.hm-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--sp-5);}
+.hm-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-5);}
 .hm-grid{display:grid;gap:3px;}
 .hm-cell{border-radius:var(--r-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--sp-3) var(--sp-2);min-height:56px;border:1.5px solid;transition:transform .12s,box-shadow .12s;cursor:default;}
 .hm-cell:hover{transform:scale(1.06);box-shadow:var(--shadow-md);z-index:5;position:relative;}
 .hm-cell-name{font-family:var(--font-mono);font-size:.7rem;font-weight:600;margin-bottom:2px;}
 .hm-cell-risk{font-family:var(--font-mono);font-size:.65rem;opacity:.8;}
-.hm-header{font-family:var(--font-mono);font-size:.65rem;letter-spacing:.05em;color:var(--text-muted);display:flex;align-items:center;justify-content:center;min-height:56px;}
+.hm-header{font-family:var(--font-mono);font-size:.65rem;letter-spacing:.05em;color:var(--text-muted)!important;display:flex;align-items:center;justify-content:center;min-height:56px;}
 .hm-legend{display:flex;gap:var(--sp-5);margin-top:var(--sp-4);flex-wrap:wrap;}
-.hm-legend-item{font-family:var(--font-mono);font-size:.7rem;display:flex;align-items:center;gap:5px;color:var(--text-muted);}
+.hm-legend-item{font-family:var(--font-mono);font-size:.7rem;display:flex;align-items:center;gap:5px;color:var(--text-muted)!important;}
 .hm-dot{width:10px;height:10px;border-radius:3px;display:inline-block;border:1.5px solid;}
 
 /* Chromosome */
 .chrom-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-5) var(--sp-6);box-shadow:var(--shadow-sm);}
-.chrom-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--sp-4);}
+.chrom-eyebrow{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-4);}
 .chrom-row{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);}
-.chrom-chr{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);width:18px;text-align:right;flex-shrink:0;}
+.chrom-chr{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted)!important;width:18px;text-align:right;flex-shrink:0;}
 .chrom-bar{flex:1;height:11px;background:var(--surface-sub);border-radius:6px;position:relative;overflow:visible;border:1px solid var(--border-light);}
 .chrom-body{position:absolute;inset:0;background:linear-gradient(90deg,#DDE3EE,#EEF2F8,#DDE3EE);border-radius:6px;}
 .chrom-marker{position:absolute;top:-5px;width:3px;height:21px;border-radius:2px;transform:translateX(-50%);}
-.chrom-gene{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary);width:56px;flex-shrink:0;font-weight:500;}
-.chrom-band{font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted);}
+.chrom-gene{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary)!important;width:56px;flex-shrink:0;font-weight:500;}
+.chrom-band{font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted)!important;}
 
 /* Population freq */
 .pop-wrap{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);box-shadow:var(--shadow-xs);}
-.pop-eyebrow{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--sp-3);}
+.pop-eyebrow{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:var(--sp-3);}
 .pop-row{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);}
-.pop-ph{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary);width:96px;flex-shrink:0;font-weight:500;}
+.pop-ph{font-family:var(--font-mono);font-size:.75rem;color:var(--text-secondary)!important;width:96px;flex-shrink:0;font-weight:500;}
 .pop-track{flex:1;height:4px;background:var(--surface-sub);border-radius:2px;overflow:hidden;}
 .pop-fill{height:100%;border-radius:2px;animation:bar-fill .7s cubic-bezier(.4,0,.2,1) both;}
-.pop-pct{font-family:var(--font-mono);font-size:.7rem;width:32px;text-align:right;color:var(--text-muted);}
-.pop-you{font-family:var(--font-mono);font-size:.65rem;color:var(--brand);font-weight:700;margin-left:3px;}
+.pop-pct{font-family:var(--font-mono);font-size:.7rem;width:32px;text-align:right;color:var(--text-muted)!important;}
+.pop-you{font-family:var(--font-mono);font-size:.65rem;color:var(--brand)!important;font-weight:700;margin-left:3px;}
 
 /* Interaction matrix */
 .ix-grid{display:grid;gap:3px;}
 .ix-cell{border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;min-height:44px;font-family:var(--font-mono);font-size:.65rem;text-align:center;padding:var(--sp-1);font-weight:700;border:1.5px solid;transition:transform .12s,box-shadow .12s;}
 .ix-cell:hover{transform:scale(1.06);z-index:5;position:relative;box-shadow:var(--shadow-md);}
-.ix-head{font-family:var(--font-mono);font-size:.65rem;letter-spacing:.05em;color:var(--text-muted);display:flex;align-items:center;justify-content:center;min-height:44px;}
+.ix-head{font-family:var(--font-mono);font-size:.65rem;letter-spacing:.05em;color:var(--text-muted)!important;display:flex;align-items:center;justify-content:center;min-height:44px;}
 
 /* Drug card */
 .dcard{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-2xl);margin-bottom:var(--sp-6);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .2s;}
@@ -311,25 +340,25 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .dcard-header{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-5) var(--sp-6);border-bottom:1px solid var(--border-light);}
 .dcard-left{display:flex;align-items:center;gap:var(--sp-4);}
 .dcard-indicator{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.dcard-drug{font-size:1.125rem;font-weight:700;letter-spacing:-.02em;color:var(--text-primary);}
-.dcard-meta{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);margin-top:3px;}
+.dcard-drug{font-size:1.125rem;font-weight:700;letter-spacing:-.02em;color:var(--text-primary)!important;}
+.dcard-meta{font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted)!important;margin-top:3px;}
 .dcard-body{padding:var(--sp-6);}
 
 /* Metrics row */
 .metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border-light);border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--border-light);margin-bottom:var(--sp-5);}
 .metric-cell{background:var(--surface-sub);padding:var(--sp-4);}
-.metric-key{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
-.metric-val{font-size:1.125rem;font-weight:700;color:var(--text-primary);letter-spacing:-.02em;}
+.metric-key{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;margin-bottom:4px;}
+.metric-val{font-size:1.125rem;font-weight:700;color:var(--text-primary)!important;letter-spacing:-.02em;}
 
 .conf-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-5);margin-bottom:var(--sp-5);}
-.conf-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);display:flex;justify-content:space-between;margin-bottom:5px;}
+.conf-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)!important;display:flex;justify-content:space-between;margin-bottom:5px;}
 .conf-track{height:4px;background:var(--surface-sub);border-radius:2px;overflow:hidden;}
 .conf-fill{height:100%;border-radius:2px;animation:bar-fill .7s cubic-bezier(.4,0,.2,1) both;}
 
 /* Variant table */
 .vtable{width:100%;border-collapse:collapse;}
-.vtable th{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding:0 var(--sp-3) var(--sp-3);text-align:left;border-bottom:1px solid var(--border-light);}
-.vtable td{font-family:var(--font-mono);font-size:.85rem;color:var(--text-secondary);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-light);}
+.vtable th{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)!important;padding:0 var(--sp-3) var(--sp-3);text-align:left;border-bottom:1px solid var(--border-light);}
+.vtable td{font-family:var(--font-mono);font-size:.85rem;color:var(--text-secondary)!important;padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-light);}
 .vtable tbody tr:last-child td{border-bottom:none;}.vtable tbody tr:hover td{background:var(--surface-sub);}
 .v-rsid{color:#2563EB!important;font-weight:500!important;}.v-star{color:#7C3AED!important;font-weight:500!important;}
 .v-nofunc{color:var(--danger)!important;font-weight:500!important;}.v-dec{color:var(--warn)!important;font-weight:500!important;}.v-norm{color:var(--safe)!important;font-weight:500!important;}
@@ -337,26 +366,25 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 /* Recommendation box */
 .rec-box{border-radius:var(--r-lg);border:1.5px solid;padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);}
 .rec-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:var(--sp-2);}
-.rec-text{font-size:.95rem;line-height:1.75;color:var(--text-secondary);}
+.rec-text{font-size:.95rem;line-height:1.75;color:var(--text-secondary)!important;}
 .alt-chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
-.alt-chip{font-family:var(--font-mono);font-size:.75rem;font-weight:500;color:var(--brand);background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-full);padding:4px 12px;}
-.cpic-badge{font-family:var(--font-mono);font-size:.65rem;font-weight:700;background:#FEFCE8;border:1px solid #FDE047;color:#713F12;padding:2px 8px;border-radius:4px;display:inline-block;margin-left:var(--sp-2);vertical-align:middle;letter-spacing:.05em;}
+.alt-chip{font-family:var(--font-mono);font-size:.75rem;font-weight:500;color:var(--brand)!important;background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-full);padding:4px 12px;}
+.cpic-badge{font-family:var(--font-mono);font-size:.65rem;font-weight:700;background:#FEFCE8;border:1px solid #FDE047;color:#713F12!important;padding:2px 8px;border-radius:4px;display:inline-block;margin-left:var(--sp-2);vertical-align:middle;letter-spacing:.05em;}
 
 /* AI block */
 .ai-block{background:linear-gradient(135deg,#F8FBFF 0%,#EFF6FF 100%);border:1.5px solid var(--brand-border);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-5);box-shadow:0 2px 8px rgba(29,78,216,.06);}
 .ai-header{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:rgba(255,255,255,.7);border-bottom:1px solid var(--brand-border);}
-/* BUG 1 FIX: badge always shows clean label — raw model strings now cleaned in Python */
-.ai-badge-pill{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--brand-light);border:1px solid var(--brand-border);color:var(--brand);padding:3px 9px;border-radius:var(--r-sm);}
-.ai-title{font-size:.9rem;font-weight:600;color:var(--brand-dark);}
+.ai-badge-pill{font-family:var(--font-mono);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--brand-light);border:1px solid var(--brand-border);color:var(--brand)!important;padding:3px 9px;border-radius:var(--r-sm);}
+.ai-title{font-size:.9rem;font-weight:600;color:var(--brand-dark)!important;}
 .ai-section{padding:var(--sp-4) var(--sp-5);border-bottom:1px solid rgba(191,219,254,.5);}
 .ai-section:last-child{border-bottom:none;}.ai-section:hover{background:rgba(255,255,255,.5);}
-.ai-sec-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-bottom:var(--sp-2);}
-.ai-sec-text{font-size:.9rem;line-height:1.8;color:var(--text-secondary);}
+.ai-sec-label{font-family:var(--font-mono);font-size:.65rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--brand)!important;margin-bottom:var(--sp-2);}
+.ai-sec-text{font-size:.9rem;line-height:1.8;color:var(--text-secondary)!important;}
 
 /* Narrative */
 .narrative-box{background:var(--brand-light);border:1.5px solid var(--brand-border);border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);box-shadow:var(--shadow-sm);}
 .narrative-header{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4);}
-.narrative-text{font-size:.95rem;line-height:1.85;color:var(--text-secondary);}
+.narrative-text{font-size:.95rem;line-height:1.85;color:var(--text-secondary)!important;}
 
 /* Before/After */
 .ba-grid{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--border-light);border-radius:var(--r-xl);overflow:hidden;margin-bottom:var(--sp-6);box-shadow:var(--shadow-md);}
@@ -369,24 +397,24 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 /* Rx checker */
 .rx-result{border-radius:var(--r-lg);padding:var(--sp-5) var(--sp-6);margin-top:var(--sp-4);border:1.5px solid;animation:fade-up .25s ease;box-shadow:var(--shadow-md);}
 .rx-verdict{font-size:.95rem;font-weight:700;margin-bottom:var(--sp-2);}
-.rx-detail{font-size:.875rem;line-height:1.7;color:var(--text-secondary);margin-bottom:var(--sp-2);}
+.rx-detail{font-size:.875rem;line-height:1.7;color:var(--text-secondary)!important;margin-bottom:var(--sp-2);}
 .rx-meta{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;}
 
-/* BUG 2 FIX: Clinical note — pre text was invisible.
-   Root cause: global pre only set font-family with no color. Streamlit's dark
-   container backgrounds caused inherited text to be near-invisible.
-   Fix: explicit color on .note-box pre AND the global pre rule. */
-.note-box{background:var(--surface-sub);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-6);}
-.note-box pre,.note-box pre *{
-  font-family:var(--font-mono)!important;
+/* ═══ CLINICAL NOTE FIX — hardcoded color, not CSS var ═══ */
+.note-box{background:#F1F5F9;border:1px solid #E8EDF5;border-radius:var(--r-xl);padding:var(--sp-6);}
+.note-box pre{
+  font-family:'JetBrains Mono','Fira Code',monospace!important;
   font-size:.85rem!important;
-  color:var(--text-secondary)!important;
+  color:#0F172A!important;
   background:transparent!important;
   line-height:1.85!important;
   white-space:pre-wrap!important;
   word-break:break-word!important;
   font-weight:400!important;
+  margin:0!important;
+  padding:0!important;
 }
+.note-box pre *,.note-box code{color:#0F172A!important;background:transparent!important;}
 
 /* Patient mode */
 .patient-banner{border-radius:var(--r-xl);padding:var(--sp-6);margin-bottom:var(--sp-6);border:1.5px solid;box-shadow:var(--shadow-md);}
@@ -396,65 +424,163 @@ html,body,[class*="css"]{font-family:var(--font-body)!important;font-size:16px!i
 .pcard:hover{box-shadow:var(--shadow-md);}
 .pcard-drug{font-size:1.1rem;font-weight:700;letter-spacing:-.02em;margin-bottom:3px;}
 .pcard-verdict{font-size:.9rem;font-weight:600;line-height:1.5;margin-bottom:var(--sp-2);}
-.pcard-gene{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;color:var(--text-muted);margin-bottom:var(--sp-3);font-weight:600;text-transform:uppercase;}
-.pcard-plain{font-size:.9rem;line-height:1.8;color:var(--text-secondary);}
+.pcard-gene{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.06em;color:var(--text-muted)!important;margin-bottom:var(--sp-3);font-weight:600;text-transform:uppercase;}
+.pcard-plain{font-size:.9rem;line-height:1.8;color:var(--text-secondary)!important;}
 .pcard-action{display:flex;align-items:flex-start;gap:var(--sp-3);background:var(--surface-sub);border:1px solid var(--border-light);border-radius:var(--r-lg);padding:var(--sp-4);margin-top:var(--sp-4);}
-.pcard-action-text{font-size:.875rem;color:var(--text-primary);line-height:1.65;}
+.pcard-action-text{font-size:.875rem;color:var(--text-primary)!important;line-height:1.65;}
 
 /* Disclaimer */
 .disclaimer-box{display:flex;gap:var(--sp-4);background:#FFFBEB;border:1px solid #FDE68A;border-left:3px solid var(--warn);border-radius:var(--r-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-6);}
-.disclaimer-text{font-size:.85rem;color:#78350F;line-height:1.7;}
+.disclaimer-text{font-size:.85rem;color:#78350F!important;line-height:1.7;}
 
 /* Test suite card */
-.tc-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-5);box-shadow:var(--shadow-xs);}
-.tc-name{font-size:.95rem;font-weight:700;color:var(--text-primary);margin-bottom:var(--sp-1);}
-.tc-desc{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);margin-bottom:var(--sp-4);line-height:1.7;}
+.tc-card{background:#FFFFFF!important;border:1px solid #E8EDF5!important;border-radius:16px!important;padding:20px!important;box-shadow:0 1px 3px rgba(15,23,42,.06)!important;margin-bottom:12px!important;}
+.tc-name{font-size:.95rem!important;font-weight:700!important;color:#0F172A!important;margin-bottom:4px!important;display:block!important;}
+.tc-desc{font-family:'JetBrains Mono',monospace!important;font-size:.7rem!important;color:#64748B!important;margin-bottom:16px!important;line-height:1.7!important;display:block!important;}
 
 /* Empty state */
 .empty-state{text-align:center;padding:5rem 2rem;border:1.5px dashed var(--border);border-radius:var(--r-2xl);background:var(--surface);box-shadow:var(--shadow-xs);}
 .empty-icon{font-size:2.5rem;display:block;margin-bottom:var(--sp-4);opacity:.3;}
-.empty-title{font-size:1.125rem;font-weight:600;color:var(--text-secondary);margin-bottom:var(--sp-2);}
-.empty-hint{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted);letter-spacing:.04em;line-height:2.4;}
+.empty-title{font-size:1.125rem;font-weight:600;color:var(--text-secondary)!important;margin-bottom:var(--sp-2);}
+.empty-hint{font-family:var(--font-mono);font-size:.7rem;color:var(--text-muted)!important;letter-spacing:.04em;line-height:2.4;}
 
 .info-strip{display:flex;align-items:flex-start;gap:var(--sp-3);background:var(--brand-light);border:1px solid var(--brand-border);border-radius:var(--r-md);padding:var(--sp-4);margin-bottom:var(--sp-4);}
-.info-strip-text{font-size:.875rem;color:var(--brand-dark);line-height:1.65;}
+.info-strip-text{font-size:.875rem;color:var(--brand-dark)!important;line-height:1.65;}
 
-/* Buttons */
-.stButton>button{background:var(--brand)!important;color:#FFF!important;border:none!important;border-radius:var(--r-md)!important;font-family:var(--font-body)!important;font-weight:600!important;font-size:.95rem!important;padding:.6875rem 1.75rem!important;height:48px!important;transition:all .15s!important;box-shadow:0 1px 2px rgba(29,78,216,.2)!important;min-height:44px!important;}
+/* ═══ BUTTONS ═══ */
+.stButton>button{background:var(--brand)!important;color:#FFFFFF!important;border:none!important;border-radius:var(--r-md)!important;font-family:var(--font-body)!important;font-weight:600!important;font-size:.95rem!important;padding:.6875rem 1.75rem!important;height:48px!important;transition:all .15s!important;box-shadow:0 1px 2px rgba(29,78,216,.2)!important;min-height:44px!important;}
 .stButton>button:hover{background:var(--brand-hover)!important;box-shadow:0 4px 12px rgba(29,78,216,.3)!important;transform:translateY(-1px)!important;}
+.stButton>button *,.stButton>button span,.stButton>button p,.stButton>button div{color:#FFFFFF!important;}
+/* File uploader "Browse files" button — MUST come after .stButton>button to win specificity */
+[data-testid="stFileUploader"] .stButton>button,
+[data-testid="stFileUploader"] button{background:#FFFFFF!important;color:var(--brand)!important;border:1.5px solid var(--brand-border)!important;box-shadow:none!important;transform:none!important;height:auto!important;min-height:36px!important;padding:6px 18px!important;}
+[data-testid="stFileUploader"] .stButton>button:hover,
+[data-testid="stFileUploader"] button:hover{background:var(--brand-light)!important;box-shadow:none!important;transform:none!important;}
+[data-testid="stFileUploader"] .stButton>button *,
+[data-testid="stFileUploader"] button *,
+[data-testid="stFileUploader"] button span{color:var(--brand)!important;}
 .stDownloadButton>button{background:var(--surface)!important;color:var(--text-secondary)!important;border:1.5px solid var(--border)!important;border-radius:var(--r-md)!important;font-family:var(--font-mono)!important;font-size:.8rem!important;padding:.5rem 1rem!important;transition:all .15s!important;box-shadow:var(--shadow-xs)!important;min-height:44px!important;}
-.stDownloadButton>button:hover{background:var(--brand)!important;color:#FFF!important;border-color:var(--brand)!important;}
+.stDownloadButton>button:hover{background:var(--brand)!important;color:#FFFFFF!important;border-color:var(--brand)!important;}
+.stDownloadButton>button *,.stDownloadButton>button span,.stDownloadButton>button p{color:inherit!important;}
 
-/* BUG 3 FIX: File uploader filename + size text was invisible.
-   Root cause: .stFileUploader>div set background:var(--surface) with no text color.
-   Streamlit's injected dark label styles bled through making text invisible.
-   Fix: explicit color overrides on every text element inside the uploader. */
-.stFileUploader>div{border-radius:var(--r-xl)!important;border:2px dashed var(--border)!important;background:var(--surface)!important;transition:border-color .15s,background .15s!important;padding:var(--sp-8)!important;}
-.stFileUploader>div:hover{border-color:var(--brand)!important;background:var(--brand-light)!important;}
-.stFileUploader label,.stFileUploader p,.stFileUploader small,.stFileUploader span,
-[data-testid="stFileUploader"] label,[data-testid="stFileUploader"] p,
-[data-testid="stFileUploader"] small,[data-testid="stFileUploader"] span{
-  color:var(--text-secondary)!important;font-family:var(--font-body)!important;
+/* ═══ FILE UPLOADER — COMPREHENSIVE VISIBILITY FIX ═══ */
+[data-testid="stFileUploader"]{color:var(--text-primary)!important;}
+/* The drop zone box */
+[data-testid="stFileUploader"] section > div,
+[data-testid="stFileUploader"] > label + div > div{
+  border-radius:var(--r-xl)!important;
+  border:2px dashed var(--border)!important;
+  background:var(--surface)!important;
+  padding:var(--sp-8)!important;
+  transition:border-color .15s,background .15s!important;
+}
+[data-testid="stFileUploader"] section > div:hover{border-color:var(--brand)!important;background:var(--brand-light)!important;}
+/* All text inside uploader */
+[data-testid="stFileUploader"] label{color:var(--text-secondary)!important;font-size:1rem!important;}
+[data-testid="stFileUploader"] p{color:var(--text-secondary)!important;font-family:var(--font-body)!important;}
+[data-testid="stFileUploader"] small{color:var(--text-muted)!important;font-size:.8rem!important;}
+[data-testid="stFileUploader"] span{color:var(--text-secondary)!important;}
+/* The uploaded file row */
+[data-testid="stFileUploaderFile"]{
+  background:var(--surface-sub)!important;
+  border-radius:var(--r-md)!important;
+  padding:8px 12px!important;
+  margin-top:8px!important;
 }
 [data-testid="stFileUploaderFile"] span,
 [data-testid="stFileUploaderFile"] p,
-[data-testid="stFileUploaderFile"] small{color:var(--text-primary)!important;font-weight:500!important;}
+[data-testid="stFileUploaderFile"] div{
+  color:#0F172A!important;
+  font-weight:500!important;
+  font-family:var(--font-body)!important;
+}
+[data-testid="stFileUploaderFile"] small{
+  color:#64748B!important;
+  font-weight:400!important;
+  font-size:.8rem!important;
+}
+/* Browse files button — must override .stButton>button which sets dark brand bg */
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploader"] .stButton>button,
+[data-testid="stFileUploaderDropZone"] button,
+[data-testid="stFileUploader"] section button{
+  background:#FFFFFF!important;
+  color:var(--brand)!important;
+  border:1.5px solid var(--brand-border)!important;
+  border-radius:var(--r-md)!important;
+  font-weight:600!important;
+  padding:6px 16px!important;
+  box-shadow:none!important;
+  transform:none!important;
+  height:auto!important;
+}
+[data-testid="stFileUploader"] button span,
+[data-testid="stFileUploader"] button p,
+[data-testid="stFileUploader"] button div,
+[data-testid="stFileUploaderDropZone"] button span,
+[data-testid="stFileUploaderDropZone"] button *{color:var(--brand)!important;}
+/* Drop zone — force white bg on ALL internal divs so no dark bleed-through */
+[data-testid="stFileUploaderDropZone"],
+[data-testid="stFileUploaderDropZone"] > div,
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section > div > div{
+  background:#FFFFFF!important;
+  color:var(--text-secondary)!important;
+}
+/* Legacy selectors */
+.stFileUploader > div{border-radius:var(--r-xl)!important;border:2px dashed var(--border)!important;background:var(--surface)!important;padding:var(--sp-8)!important;}
+.stFileUploader label,.stFileUploader p,.stFileUploader small,.stFileUploader span{color:var(--text-secondary)!important;}
+.uploadedFileName,.uploadedFileData{color:#0F172A!important;font-weight:500!important;}
 
-/* Inputs */
+/* ═══ TEXT INPUT ═══ */
 .stTextInput>div>div>input{border-radius:var(--r-md)!important;border:1.5px solid var(--border)!important;background:var(--surface)!important;color:var(--text-primary)!important;font-family:var(--font-body)!important;font-size:.95rem!important;padding:.6875rem .875rem!important;height:48px!important;transition:border-color .15s,box-shadow .15s!important;box-shadow:var(--shadow-xs)!important;}
 .stTextInput>div>div>input:focus{border-color:var(--brand)!important;box-shadow:0 0 0 3px rgba(147,197,253,.4)!important;outline:none!important;}
-.stSelectbox [data-baseweb="select"]>div,.stMultiSelect [data-baseweb="select"]>div{border-radius:var(--r-md)!important;border:1.5px solid var(--border)!important;background:var(--surface)!important;min-height:48px!important;}
+.stTextInput>div>div>input::placeholder{color:var(--text-xmuted)!important;}
+.stTextInput label,.stTextInput [data-testid="InputInstructions"]{color:var(--text-secondary)!important;}
+
+/* ═══ SELECTBOX & MULTISELECT ═══ */
+.stSelectbox [data-baseweb="select"]>div,.stMultiSelect [data-baseweb="select"]>div{border-radius:var(--r-md)!important;border:1.5px solid var(--border)!important;background:var(--surface)!important;min-height:48px!important;color:var(--text-primary)!important;}
+.stSelectbox [data-baseweb="select"] [data-testid="stMarkdown"],
+.stSelectbox [data-baseweb="select"] span,
+.stSelectbox [data-baseweb="select"] div,
+.stSelectbox [data-baseweb="select"] p{color:var(--text-primary)!important;}
+.stSelectbox label,.stMultiSelect label{color:var(--text-secondary)!important;}
+/* Dropdown list */
+[data-baseweb="menu"] li,[data-baseweb="menu"] [role="option"]{color:var(--text-primary)!important;background:var(--surface)!important;font-family:var(--font-body)!important;}
+[data-baseweb="menu"] li:hover,[data-baseweb="menu"] [aria-selected="true"]{background:var(--brand-light)!important;color:var(--brand-dark)!important;}
+/* Multi-select tags */
 .stMultiSelect span[data-baseweb="tag"]{background:var(--brand-light)!important;color:var(--brand-dark)!important;border:1px solid var(--brand-border)!important;font-family:var(--font-mono)!important;font-size:.75rem!important;border-radius:5px!important;}
+.stMultiSelect span[data-baseweb="tag"] span{color:var(--brand-dark)!important;}
+
+/* ═══ CHECKBOX ═══ */
+.stCheckbox label,.stCheckbox span,.stCheckbox p{color:var(--text-secondary)!important;}
+
+/* ═══ EXPANDER ═══ */
 div[data-testid="stExpander"]{background:var(--surface)!important;border:1px solid var(--border-light)!important;border-radius:var(--r-lg)!important;box-shadow:var(--shadow-xs)!important;margin-bottom:var(--sp-2)!important;}
 div[data-testid="stExpander"] summary{font-family:var(--font-body)!important;font-size:.9rem!important;font-weight:500!important;color:var(--text-secondary)!important;padding:var(--sp-4) var(--sp-5)!important;}
+div[data-testid="stExpander"] summary *{color:inherit!important;}
+div[data-testid="stExpander"] [data-testid="stExpanderDetails"]{color:var(--text-primary)!important;}
+
+/* ═══ METRICS ═══ */
 [data-testid="stMetric"]{background:var(--surface)!important;border:1px solid var(--border-light)!important;border-radius:var(--r-xl)!important;padding:var(--sp-5)!important;box-shadow:var(--shadow-xs)!important;}
 [data-testid="stMetricLabel"]{font-family:var(--font-mono)!important;font-size:.7rem!important;color:var(--text-muted)!important;text-transform:uppercase!important;letter-spacing:.1em!important;font-weight:600!important;}
+[data-testid="stMetricLabel"] *{color:var(--text-muted)!important;}
 [data-testid="stMetricValue"]{font-size:1.875rem!important;color:var(--text-primary)!important;font-weight:700!important;letter-spacing:-.02em!important;}
+[data-testid="stMetricValue"] *{color:var(--text-primary)!important;}
 
-/* BUG 2 FIX also: global pre must set explicit color (was font-family only) */
-.stCode{border-radius:var(--r-lg)!important;}
-pre{font-family:var(--font-mono)!important;color:var(--text-secondary)!important;white-space:pre-wrap!important;word-break:break-word!important;}
+/* ═══ ALERTS / BANNERS ═══ */
+[data-testid="stAlert"] *{color:inherit!important;}
+
+/* ═══ SPINNER ═══ */
 .stSpinner>div{border-color:var(--brand) transparent transparent transparent!important;}
+.stSpinner p,.stSpinner span{color:var(--text-muted)!important;}
+
+/* ═══ PRE/CODE — global readable override ═══ */
+.stCode{border-radius:var(--r-lg)!important;}
+pre,code{font-family:var(--font-mono)!important;color:#334155!important;white-space:pre-wrap!important;word-break:break-word!important;}
+[data-testid="stCodeBlock"] pre,[data-testid="stCodeBlock"] code{background:#F1F5F9!important;color:#0F172A!important;}
+/* JSON viewer */
+.stJson *{color:var(--text-primary)!important;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -499,10 +625,7 @@ def risk_badge_html(rl):
             f'<span style="font-size:.8rem;">{rc["shape"]}</span>{rl}</span>')
 
 def clean_model_label(raw_model: str):
-    """
-    BUG 1 FIX: Return (display_label, is_static) with a clean human-readable label.
-    Strips parenthetical suffixes like '(rate-limited)', '(no API key)', '(error: ...)'.
-    """
+    """Return clean human-readable label. Strips parenthetical suffixes."""
     is_static = "static" in raw_model.lower()
     if is_static:
         return "Static Template", True
@@ -649,16 +772,16 @@ def render_drug_table(outputs, pid):
         sp   = SEV_CFG.get(sev, SEV_CFG["none"])
         badge = risk_badge_html(rl)
         rows += f"""<div class="dtab-row">
-          <div class="dtab-cell" style="font-weight:700;color:var(--text-primary);">{drug.title()}</div>
+          <div class="dtab-cell" style="font-weight:700;color:#0F172A;">{drug.title()}</div>
           <div class="dtab-cell">{badge}</div>
           <div class="dtab-cell"><span style="color:{sp['text']};font-weight:600;">{sp['label']}</span></div>
-          <div class="dtab-cell" style="font-family:var(--font-mono);font-size:.8rem;color:var(--text-muted);">{gene}</div>
+          <div class="dtab-cell" style="font-family:var(--font-mono);font-size:.8rem;color:#64748B;">{gene}</div>
           <div class="dtab-cell"><span style="font-family:var(--font-mono);font-size:.8rem;color:{rc['tag_text']};background:{rc['tag_bg']};border:1px solid {rc['border']};padding:2px 8px;border-radius:4px;font-weight:600;">{ph}</span></div>
           <div class="dtab-cell">
-            <div style="flex:1;height:4px;background:var(--surface-sub);border-radius:2px;overflow:hidden;margin-right:8px;">
+            <div style="flex:1;height:4px;background:#E8EDF5;border-radius:2px;overflow:hidden;margin-right:8px;">
               <div style="width:{conf*100:.0f}%;height:100%;background:{rc['severity_dot']};border-radius:2px;"></div>
             </div>
-            <span style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-muted);font-weight:600;">{conf:.0%}</span>
+            <span style="font-family:var(--font-mono);font-size:.75rem;color:#64748B;font-weight:600;">{conf:.0%}</span>
           </div>
         </div>"""
         data.append({"Drug": drug, "Risk": rl, "Severity": sev, "Gene": gene,
@@ -705,7 +828,7 @@ def render_heatmap(outputs):
                          f'<div class="hm-cell-name" style="color:{rc["text"]};">{sh}</div>'
                          f'<div class="hm-cell-risk" style="color:{rc["text"]};">{ph}</div></div>')
             else:
-                rows += '<div class="hm-cell" style="background:var(--surface-sub);border-color:var(--border-light);"><div class="hm-cell-risk" style="color:var(--text-xmuted);">—</div></div>'
+                rows += '<div class="hm-cell" style="background:#F1F5F9;border-color:#E8EDF5;"><div class="hm-cell-risk" style="color:#94A3B8;">—</div></div>'
     legend = "".join(
         f'<div class="hm-legend-item"><span class="hm-dot" style="background:{RISK_CFG[r]["bg"]};border-color:{RISK_CFG[r]["border"]};"></span><span>{RISK_CFG[r]["shape"]} {r}</span></div>'
         for r in ["Safe", "Adjust Dosage", "Toxic", "Ineffective"])
@@ -745,7 +868,7 @@ def render_chromosome(outputs, parsed):
     <div class="chrom-wrap">
       <div class="chrom-eyebrow">Variant Chromosome Locations</div>
       {rows}
-      <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-xmuted);margin-top:var(--sp-3);">
+      <div style="font-family:var(--font-mono);font-size:.65rem;color:#94A3B8;margin-top:var(--sp-3);">
         Coloured markers = variants detected · Grey = undetected
       </div>
     </div>""", unsafe_allow_html=True)
@@ -789,7 +912,7 @@ def render_ix_matrix(outputs, ix):
         "moderate": {"bg":"#FFFBEB","text":"#78350F","border":"#FDE68A"},
         "low":      {"bg":"#FEFCE8","text":"#713F12","border":"#FDE047"},
         "none":     {"bg":"#F0FDF4","text":"#14532D","border":"#BBF7D0"},
-        "diag":     {"bg":"var(--surface-sub)","text":"var(--text-muted)","border":"var(--border-light)"},
+        "diag":     {"bg":"#F1F5F9","text":"#64748B","border":"#E2E8F0"},
     }
     hdrs = '<div class="ix-head"></div>'
     for d in drugs:
@@ -808,7 +931,7 @@ def render_ix_matrix(outputs, ix):
                 grid += f'<div class="ix-cell" style="background:{mc["bg"]};border-color:{mc["border"]};color:{mc["text"]};">{lbl}</div>'
     sec("Drug Interaction Matrix")
     st.markdown(f"""
-    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:var(--sp-5);margin-bottom:var(--sp-4);box-shadow:var(--shadow-sm);">
+    <div style="background:#FFFFFF;border:1px solid #E8EDF5;border-radius:var(--r-xl);padding:var(--sp-5);margin-bottom:var(--sp-4);box-shadow:var(--shadow-sm);">
       <div class="ix-grid" style="grid-template-columns:76px repeat({n},1fr);gap:3px;">{hdrs}{grid}</div>
     </div>""", unsafe_allow_html=True)
     shown = set()
@@ -823,7 +946,7 @@ def render_ix_matrix(outputs, ix):
                 mech = x.get("mechanism", x.get("message", ""))
                 rec  = x.get("recommendation", "")
                 if mech:
-                    st.markdown(f'<div style="font-size:.9rem;color:var(--text-secondary);line-height:1.75;margin-bottom:var(--sp-2);">{mech}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-size:.9rem;color:#334155;line-height:1.75;margin-bottom:var(--sp-2);">{mech}</div>', unsafe_allow_html=True)
                 if rec:
                     st.markdown(f'<div style="font-family:var(--font-mono);font-size:.8rem;color:{sp["text"]};margin-top:var(--sp-2);font-weight:600;">→ {rec}</div>', unsafe_allow_html=True)
 
@@ -843,7 +966,7 @@ def render_narrative(outputs, parsed, pid, key, skip_llm):
     <div class="narrative-box">
       <div class="narrative-header">
         <span class="ai-badge-pill">{model_label}</span>
-        <span style="font-size:.9rem;font-weight:600;color:var(--brand-dark);">Unified Patient Summary</span>
+        <span style="font-size:.9rem;font-weight:600;color:#1E3A8A;">Unified Patient Summary</span>
       </div>
       <div class="narrative-text">{nar}</div>
     </div>""", unsafe_allow_html=True)
@@ -867,7 +990,7 @@ def render_before_after(outputs):
     sec("Clinical Impact — Before & After PGx")
     st.markdown(f"""
     <div class="ba-grid">
-      <div class="ba-side" style="background:#FFF1F2;border-right:1px solid var(--border-light);">
+      <div class="ba-side" style="background:#FFF1F2;border-right:1px solid #E8EDF5;">
         <div class="ba-side-lbl" style="color:#B91C1C;">⛔ Without PharmaGuard</div>
         <div class="ba-drug" style="color:#7F1D1D;">{drug.title()} — Standard Protocol</div>
         <div class="ba-text" style="color:#7F1D1D;">{BEFORE.get(rl,"Risk undetected")}</div>
@@ -937,8 +1060,8 @@ def render_clinical_note(outputs, pid):
         if alts:
             lines.append(f"Alternatives: {', '.join(alts)}")
         lines.append("")
-    lines += ["", "—" * 60,
-              "Generated by PharmaGuard v9.1 · CPIC Level A evidence · cpicpgx.org",
+    lines += ["", "-" * 60,
+              "Generated by PharmaGuard v9.2 · CPIC Level A evidence · cpicpgx.org",
               "NOT FOR CLINICAL USE WITHOUT VALIDATION BY A QUALIFIED CLINICIAN"]
     note = "\n".join(lines)
     sec("One-Click Clinical Note")
@@ -1086,7 +1209,7 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
             <div class="conf-track"><div class="conf-fill" style="width:{conf*100:.1f}%;background:{rc['severity_dot']};"></div></div>
           </div>
           <div>
-            <div class="conf-label"><span>Data Quality</span><span style="color:var(--text-muted);">{len(var)} variant{"s" if len(var)!=1 else ""}</span></div>
+            <div class="conf-label"><span>Data Quality</span><span style="color:#64748B;">{len(var)} variant{"s" if len(var)!=1 else ""}</span></div>
             <div class="conf-track"><div class="conf-fill" style="width:{dq*100:.1f}%;background:#94A3B8;"></div></div>
           </div>
         </div>""", unsafe_allow_html=True)
@@ -1109,17 +1232,16 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
             </div>""", unsafe_allow_html=True)
 
         # CPIC Recommendation
-        rec_color = rc["bg"]; rec_border = rc["border"]; rec_text_c = rc["text"]
         st.markdown(f"""
-        <div class="rec-box" style="background:{rec_color};border-color:{rec_border};">
-          <div class="rec-label" style="color:{rec_text_c};">CPIC Recommendation — {drug}</div>
+        <div class="rec-box" style="background:{rc['bg']};border-color:{rc['border']};">
+          <div class="rec-label" style="color:{rc['text']};">CPIC Recommendation — {drug}</div>
           <div class="rec-text">{rec}</div>
         </div>""", unsafe_allow_html=True)
 
         if mon:
             st.markdown(f"""
-            <div class="rec-box" style="background:var(--surface-sub);border-color:var(--border-light);">
-              <div class="rec-label" style="color:var(--text-muted);">🔬 Monitoring Protocol</div>
+            <div class="rec-box" style="background:#F1F5F9;border-color:#E8EDF5;">
+              <div class="rec-label" style="color:#64748B;">🔬 Monitoring Protocol</div>
               <div class="rec-text">{mon}</div>
             </div>""", unsafe_allow_html=True)
 
@@ -1137,7 +1259,6 @@ def render_results(outputs, parsed, ix, pdf_bytes, pid, patient_mode=False, key=
         # ── AI Explanation ────────────────────────────────────────────────────
         if exp.get("summary"):
             raw_model = exp.get("model_used", "llama-3.3-70b")
-            # BUG 1 FIX: clean_model_label() strips "(rate-limited)" etc.
             model, is_static = clean_model_label(raw_model)
             blocks = ""
             for lbl, k in [("Summary","summary"), ("Biological Mechanism","biological_mechanism"),
@@ -1172,7 +1293,7 @@ def render_nav(key_present):
     <div class="pg-nav">
       <div class="pg-brand">
         <div class="pg-brand-name">Pharma<span>Guard</span></div>
-        <div class="pg-brand-sub">v9.1 · Precision Clinical · RIFT 2026</div>
+        <div class="pg-brand-sub">v9.2 · Precision Clinical · RIFT 2026</div>
       </div>
       <div class="pg-nav-badges">
         <span class="pg-badge pg-badge-brand">CPIC Level A</span>
@@ -1213,7 +1334,7 @@ def render_persona_demo(key):
         "moderate": {"sev_bg":"#FFFBEB","sev_border":"#FDE68A","sev_text":"#78350F","sev_label":"Moderate"},
         "none":     {"sev_bg":"#F0FDF4","sev_border":"#BBF7D0","sev_text":"#14532D","sev_label":"All Safe"},
     }
-    st.markdown('<div style="font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--sp-3);">Quick Demo — Select Patient Persona</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#64748B;margin-bottom:var(--sp-3);">Quick Demo — Select Patient Persona</div>', unsafe_allow_html=True)
     cols = st.columns(4)
     for i, (pid, p) in enumerate(PERSONAS.items()):
         sc = SEV_COLORS.get(p["sev"], SEV_COLORS["none"])
@@ -1257,7 +1378,6 @@ def render_test_suite(key):
                 with st.spinner(f"Running {tc['name']}…"):
                     parsed, results, outputs, ix, pdf = run_pipeline(
                         vcf, tc["drugs"], pid, key, skip_llm=True)
-                # Show pass/fail
                 passed = all(o["risk_assessment"]["risk_label"] == tc["expected"].get(o["drug"])
                              for o in outputs if o["drug"] in tc["expected"])
                 if passed:
@@ -1317,7 +1437,6 @@ def main():
         with col_input:
             sec("Genomic Data")
 
-            # Persona shortcut info
             persona_sel = st.selectbox("Or select a test scenario",
                 options=["None"] + [p["label"] for p in PERSONAS.values()],
                 key="persona_sel")
@@ -1327,7 +1446,6 @@ def main():
                 help="Drag and drop file here\nLimit 200MB per file • VCF",
                 label_visibility="collapsed")
 
-            # Determine VCF source
             vcf_text = None
             if vcf_file:
                 vcf_text = vcf_file.read().decode("utf-8")
@@ -1394,9 +1512,9 @@ def main():
                 st.markdown(f"""
                 <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4);">
                   <span style="font-family:var(--font-mono);font-size:1rem;font-weight:700;
-                    color:var(--brand);background:var(--brand-light);border:1px solid var(--brand-border);
-                    padding:4px 12px;border-radius:var(--r-full);">{res_pid}</span>
-                  <span style="font-size:.75rem;color:var(--text-muted);cursor:pointer;" title="Copy">📋</span>
+                    color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;
+                    padding:4px 12px;border-radius:9999px;">{res_pid}</span>
+                  <span style="font-size:.75rem;color:#64748B;cursor:pointer;" title="Copy">📋</span>
                 </div>""", unsafe_allow_html=True)
                 render_results(res_outs, res_par, res_ix, res_pdf, res_pid,
                                patient_mode=patient_mode, key=res_key, skip_llm=res_skip)
