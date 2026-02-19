@@ -1,0 +1,24 @@
+##fileformat=VCFv4.2
+##fileDate=20240115
+##source=PharmaGuardSampleData
+##reference=GRCh38
+##assembly=GRCh38.p14
+##INFO=<ID=GENE,Number=1,Type=String,Description="Gene symbol">
+##INFO=<ID=STAR,Number=1,Type=String,Description="Star allele designation">
+##INFO=<ID=FUNCTION,Number=1,Type=String,Description="Predicted functional status of variant">
+##INFO=<ID=RS,Number=1,Type=String,Description="dbSNP rsID">
+##INFO=<ID=CPIC,Number=1,Type=String,Description="CPIC evidence level">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr22	42522613	rs4244285	G	A	100	PASS	GENE=CYP2C19;STAR=*2;FUNCTION=no_function;CPIC=A
+chr22	42523943	rs4986893	G	A	100	PASS	GENE=CYP2C19;STAR=*3;FUNCTION=no_function;CPIC=A
+chr22	42524217	rs12248560	C	T	95	PASS	GENE=CYP2C19;STAR=*17;FUNCTION=increased_function;CPIC=A
+chr22	42526694	rs1065852	G	A	95	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function;CPIC=A
+chr22	42524947	rs3892097	C	T	92	PASS	GENE=CYP2D6;STAR=*4;FUNCTION=no_function;CPIC=A
+chr10	96741053	rs1799853	C	T	98	PASS	GENE=CYP2C9;STAR=*2;FUNCTION=decreased_function;CPIC=A
+chr10	96702047	rs1057910	A	C	97	PASS	GENE=CYP2C9;STAR=*3;FUNCTION=no_function;CPIC=A
+chr12	21331549	rs4149056	T	C	98	PASS	GENE=SLCO1B1;STAR=*5;FUNCTION=decreased_function;CPIC=A
+chr12	21239145	rs2306283	A	G	90	PASS	GENE=SLCO1B1;STAR=*1b;FUNCTION=normal_function;CPIC=B
+chr6	18143955	rs1800460	C	T	99	PASS	GENE=TPMT;STAR=*3B;FUNCTION=no_function;CPIC=A
+chr6	18129540	rs1142345	T	C	97	PASS	GENE=TPMT;STAR=*3C;FUNCTION=no_function;CPIC=A
+chr1	97915614	rs3918290	C	T	97	PASS	GENE=DPYD;STAR=*2A;FUNCTION=no_function;CPIC=A
+chr1	97981395	rs55886062	C	T	94	PASS	GENE=DPYD;STAR=*13;FUNCTION=no_function;CPIC=A
