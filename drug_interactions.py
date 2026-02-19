@@ -1,5 +1,5 @@
 """
-Drug-Drug Interaction Checker for PharmaGuard v4.0
+Drug-Drug Interaction Checker for SurakshaRx v4.0
 Unchanged from v2 — logic is correct and comprehensive.
 """
 

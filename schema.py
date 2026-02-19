@@ -1,5 +1,5 @@
 """
-Schema definitions for PharmaGuard v5.0
+Schema definitions for SurakshaRx v5.0
 FIXES:
   - Removed chrom, pos, ref, alt from detected_variants output
   - Removed contraindicated field from clinical_recommendation

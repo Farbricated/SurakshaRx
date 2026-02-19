@@ -1,5 +1,5 @@
 """
-Risk Engine for PharmaGuard v5.0
+Risk Engine for SurakshaRx v5.0
 Maps gene diplotypes -> phenotypes -> drug-specific risks
 Based on CPIC (Clinical Pharmacogenomics Implementation Consortium) guidelines
 FIXED v5.0:

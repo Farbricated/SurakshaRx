@@ -1,5 +1,5 @@
 """
-LLM Explainer for PharmaGuard v5.1 — FIXED
+LLM Explainer for SurakshaRx v5.1 — FIXED
 Changes from v5.0:
   - generate_patient_narrative() now checks a narrative-specific cache key
     before making ANY API call, so re-runs are instant.

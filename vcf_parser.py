@@ -1,5 +1,5 @@
 """
-VCF Parser for PharmaGuard v4.1 — FIXED
+VCF Parser for SurakshaRx v4.1 — FIXED
 Key fix: Now reads the GT (genotype) field and skips 0/0 (homozygous reference)
 variants. A 0/0 genotype means the patient does NOT carry the alternate allele,
 so those variants must not be counted toward diplotype calling.
@@ -254,7 +254,7 @@ def get_sample_vcf() -> str:
     """Return a minimal valid VCF for UI demo when no file is uploaded."""
     return """##fileformat=VCFv4.2
 ##fileDate=20240101
-##source=PharmaGuardTest
+##source=SurakshaRxTest
 ##reference=GRCh38
 ##INFO=<ID=GENE,Number=1,Type=String,Description="Gene name">
 ##INFO=<ID=STAR,Number=1,Type=String,Description="Star allele">

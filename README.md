@@ -1,4 +1,4 @@
-# 🧬 PharmaGuard — Pharmacogenomic Risk Prediction System
+# 🧬 SurakshaRx — Pharmacogenomic Risk Prediction System
 
 > RIFT 2026 Hackathon | Pharmacogenomics / Explainable AI Track | **v5.0 ★**
 
@@ -14,11 +14,11 @@
 
 ---
 
-## 📋 What is PharmaGuard?
+## 📋 What is SurakshaRx?
 
-Adverse drug reactions kill **over 100,000 Americans annually** — and many are preventable. Most people don't know their genes affect how medicines work in their body. PharmaGuard changes that.
+Adverse drug reactions kill **over 100,000 Americans annually** — and many are preventable. Most people don't know their genes affect how medicines work in their body. SurakshaRx changes that.
 
-Upload a genetic data file (VCF), select medications, and PharmaGuard instantly tells you:
+Upload a genetic data file (VCF), select medications, and SurakshaRx instantly tells you:
 - Which drugs are **safe** for you
 - Which need a **different dose**
 - Which are **toxic** or **won't work** based on your DNA
@@ -276,7 +276,7 @@ pharma-guard/
 ```python
 import json
 
-result = json.load(open("pharmaguard_PATIENT_001_WARFARIN.json"))
+result = json.load(open("SurakshaRx_PATIENT_001_WARFARIN.json"))
 risk      = result["risk_assessment"]["risk_label"]        # "Adjust Dosage"
 gene      = result["pharmacogenomic_profile"]["primary_gene"]  # "CYP2C9"
 diplotype = result["pharmacogenomic_profile"]["diplotype"]     # "*2/*3"
@@ -327,10 +327,10 @@ alts      = result["clinical_recommendation"]["alternative_drugs"]
 
 **Event:** RIFT 2026  
 **Track:** Pharmacogenomics / Explainable AI  
-**Hashtags:** `#RIFT2026` `#PharmaGuard` `#Pharmacogenomics` `#AIinHealthcare` `#ExplainableAI`
+**Hashtags:** `#RIFT2026` `#SurakshaRx` `#Pharmacogenomics` `#AIinHealthcare` `#ExplainableAI`
 
 ---
 
 ## ⚠️ Disclaimer
 
-PharmaGuard is a hackathon prototype for educational purposes only. It is **NOT** a medical device and should **NOT** be used for clinical decision-making without validation by a qualified clinical pharmacologist or geneticist. All recommendations should be verified against current CPIC guidelines at [cpicpgx.org](https://cpicpgx.org).
+SurakshaRx is a hackathon prototype for educational purposes only. It is **NOT** a medical device and should **NOT** be used for clinical decision-making without validation by a qualified clinical pharmacologist or geneticist. All recommendations should be verified against current CPIC guidelines at [cpicpgx.org](https://cpicpgx.org).
