@@ -1,19 +1,20 @@
 """
 PharmaGuard — Pharmacogenomic Risk Prediction System
-RIFT 2026 Hackathon | v4.0
-Changes from v2:
-  - LLM retry + fallback to llama-3.1-8b-instant + static template safety net
-  - explanation_generated always True
-  - alternative_drugs populated for all phenotypes (incl. CODEINE IM)
-  - monitoring_required is now drug+phenotype specific (no more contradictions)
-  - contraindicated logic corrected
-  - genes_analyzed is drug-specific (primary gene first)
-  - model_used shown in AI explanation header
+RIFT 2026 Hackathon | v5.0  ★ WOW EDITION ★
+New in v5.0:
+  - Drug × Gene Risk Heatmap (interactive color matrix)
+  - Polygenic Risk Score (0-100 composite patient score)
+  - Patient Plain-English Mode toggle (jargon → language anyone understands)
+  - Chromosome Visualization (shows where variants live on chromosomes)
+  - Population Frequency bars (how rare is this patient's genotype?)
+  - Test suite runs in PARALLEL (ThreadPoolExecutor) — instant results
+  - Glowing risk dots, animated confidence bars
 """
 
 import streamlit as st
 import json, uuid, os
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,129 +42,263 @@ RISK_CONFIG = {
     "Unknown":       {"dot": "#94a3b8", "text": "#64748b", "bg": "#f8fafc", "border": "#e2e8f0", "label": "Unknown"},
 }
 
+HEATMAP_COLORS = {
+    "Safe":          {"bg": "#052e16", "text": "#4ade80", "border": "#166534"},
+    "Adjust Dosage": {"bg": "#451a03", "text": "#fbbf24", "border": "#92400e"},
+    "Toxic":         {"bg": "#450a0a", "text": "#f87171", "border": "#991b1b"},
+    "Ineffective":   {"bg": "#2e1065", "text": "#c4b5fd", "border": "#6d28d9"},
+    "Unknown":       {"bg": "#111827", "text": "#6b7280", "border": "#374151"},
+    "N/A":           {"bg": "#0a0a0a", "text": "#1f2937", "border": "#111827"},
+}
+
+POPULATION_FREQUENCY = {
+    "CYP2D6":  {"PM": 7, "IM": 10, "NM": 77, "URM": 6},
+    "CYP2C19": {"PM": 3, "IM": 26, "NM": 52, "RM": 13, "URM": 6},
+    "CYP2C9":  {"PM": 1, "IM": 10, "NM": 89},
+    "SLCO1B1": {"Poor Function": 1, "Decreased Function": 15, "Normal Function": 84},
+    "TPMT":    {"PM": 0.3, "IM": 10, "NM": 90},
+    "DPYD":    {"PM": 0.2, "IM": 3, "NM": 97},
+}
+
+CHROM_INFO = {
+    "CYP2D6":  {"chrom": "22", "band": "q13.2",  "pos_mb": 42.5},
+    "CYP2C19": {"chrom": "10", "band": "q23.33", "pos_mb": 96.7},
+    "CYP2C9":  {"chrom": "10", "band": "q23.33", "pos_mb": 96.4},
+    "SLCO1B1": {"chrom": "12", "band": "p12.1",  "pos_mb": 21.3},
+    "TPMT":    {"chrom": "6",  "band": "p22.3",  "pos_mb": 18.1},
+    "DPYD":    {"chrom": "1",  "band": "p22.1",  "pos_mb": 97.5},
+}
+CHROM_LENGTHS_MB = {"1": 248.9, "6": 170.8, "10": 133.8, "12": 133.3, "22": 50.8}
+
+PLAIN_ENGLISH_PHENOTYPE = {
+    "PM":  "Your body barely processes this medicine",
+    "IM":  "Your body processes this medicine slower than average",
+    "NM":  "Your body processes this medicine normally",
+    "RM":  "Your body processes this medicine slightly faster than average",
+    "URM": "Your body processes this medicine dangerously fast",
+    "Normal Function":    "Your gene works normally",
+    "Decreased Function": "Your gene works at reduced capacity",
+    "Poor Function":      "Your gene barely works",
+}
+
+RISK_PLAIN_ENGLISH = {
+    ("CODEINE", "PM"):  "Your body can't convert codeine into a painkiller. You'd take it and feel nothing — or it could harm you.",
+    ("CODEINE", "URM"): "Your body converts codeine to morphine 5× faster than normal. Even one tablet could stop your breathing.",
+    ("CODEINE", "IM"):  "Codeine may work less well for you. Your doctor may need to try a different painkiller.",
+    ("CODEINE", "NM"):  "Codeine works normally for you. Standard doses should control your pain.",
+    ("WARFARIN", "PM"): "Your blood stays thin much longer than normal. Standard doses could cause dangerous bleeding.",
+    ("WARFARIN", "IM"): "Warfarin lasts longer in your body than average. You'll need a lower dose.",
+    ("WARFARIN", "NM"): "Warfarin works normally for you.",
+    ("CLOPIDOGREL", "PM"):  "This heart medication doesn't get activated in your body. It won't prevent blood clots — you need a different drug.",
+    ("CLOPIDOGREL", "IM"):  "This heart medication activates less than normal. You may need a stronger alternative.",
+    ("CLOPIDOGREL", "NM"):  "This heart medication works normally for you.",
+    ("SIMVASTATIN", "Poor Function"):      "This cholesterol drug builds up in your muscles — dangerous. You need a different medication.",
+    ("SIMVASTATIN", "Decreased Function"): "This cholesterol drug clears more slowly. A lower dose protects your muscles.",
+    ("SIMVASTATIN", "Normal Function"):    "This cholesterol drug works normally for you.",
+    ("AZATHIOPRINE", "PM"): "Your immune system drug builds up to toxic levels. Standard doses would damage your bone marrow.",
+    ("AZATHIOPRINE", "IM"): "You need a lower dose of this immune drug or your bone marrow could be affected.",
+    ("AZATHIOPRINE", "NM"): "This immune drug works normally for you.",
+    ("FLUOROURACIL", "PM"): "Your body cannot break down this chemotherapy. Standard doses would be fatal. You need a completely different treatment.",
+    ("FLUOROURACIL", "IM"): "This chemotherapy breaks down too slowly. You need half the normal dose.",
+    ("FLUOROURACIL", "NM"): "This chemotherapy drug works at a normal rate in your body.",
+}
+
+SEV_PALETTE = {
+    "low":      {"dot": "#f59e0b", "bg": "#fffbeb", "border": "#fde68a", "text": "#b45309"},
+    "moderate": {"dot": "#f97316", "bg": "#fff7ed", "border": "#fed7aa", "text": "#c2410c"},
+    "high":     {"dot": "#ef4444", "bg": "#fef2f2", "border": "#fecaca", "text": "#b91c1c"},
+    "critical": {"dot": "#dc2626", "bg": "#fef2f2", "border": "#fca5a5", "text": "#991b1b"},
+}
+IX_PALETTE = {"low": "#f59e0b", "moderate": "#f97316", "high": "#ef4444", "critical": "#dc2626"}
+
+# ── CSS ──────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="PharmaGuard", page_icon="⬡", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=Geist:wght@300;400;500;600;700&display=swap');
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, [class*="css"] { font-family: 'Geist', -apple-system, sans-serif !important; background: #0a0a0a !important; color: #f0f0f0 !important; font-size: 16px !important; }
-.stApp { background: #0a0a0a !important; }
-.main .block-container { padding: 0 3rem 6rem !important; max-width: 1120px !important; }
-#MainMenu, footer, header { visibility: hidden; }
-.pg-nav { padding: 2rem 0 2.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a2a; margin-bottom: 3rem; }
-.pg-wordmark { font-family: 'Instrument Serif', serif; font-size: 1.75rem; color: #f0f0f0; letter-spacing: -0.02em; }
-.pg-wordmark em { font-style: italic; color: #6b7280; }
-.pg-pill { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7280; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 5px 12px; border-radius: 100px; }
-.section-label { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7280; margin-bottom: 0.75rem; }
-.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: #1e1e1e; border: 1px solid #1e1e1e; border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem; }
-.stat-cell { background: #141414; padding: 1.35rem 1.5rem; }
-.stat-val { font-family: 'Instrument Serif', serif; font-size: 2.25rem; color: #f0f0f0; line-height: 1; margin-bottom: 0.3rem; }
-.stat-key { font-family: 'DM Mono', monospace; font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; color: #525252; }
-.stat-sub { font-size: 0.8rem; color: #4b4b4b; margin-top: 0.25rem; }
-.rcard { border: 1px solid #222; border-radius: 12px; background: #111; margin-bottom: 1rem; overflow: hidden; }
-.rcard-top { padding: 1.35rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1e1e1e; }
-.rcard-left { display: flex; align-items: center; gap: 0.875rem; }
-.rcard-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
-.rcard-name { font-family: 'Geist', sans-serif; font-size: 1.1rem; font-weight: 600; color: #f0f0f0; letter-spacing: -0.01em; }
-.rcard-meta { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #4b4b4b; margin-top: 3px; letter-spacing: 0.04em; }
-.rcard-badge { font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 5px 14px; border-radius: 100px; border: 1px solid; }
-.rcard-body { padding: 1.35rem 1.5rem; }
-.mc-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #1a1a1a; border-radius: 8px; overflow: hidden; margin-bottom: 1.35rem; }
-.mc-cell { background: #0e0e0e; padding: 1rem 1.1rem; }
-.mc-key { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase; color: #484848; margin-bottom: 0.35rem; }
-.mc-val { font-family: 'Geist', sans-serif; font-size: 1.05rem; font-weight: 600; color: #e8e8e8; }
-.conf-wrap { margin-bottom: 1.35rem; }
-.conf-header { display: flex; justify-content: space-between; font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em; color: #484848; margin-bottom: 7px; }
-.conf-track { height: 3px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
-.conf-fill { height: 100%; border-radius: 2px; }
-.h-rule { border: none; border-top: 1px solid #1e1e1e; margin: 1.35rem 0; }
-.inline-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #484848; margin-bottom: 0.65rem; }
-.vtable { width: 100%; border-collapse: collapse; }
-.vtable th { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; padding: 0 0.6rem 0.6rem; text-align: left; border-bottom: 1px solid #1e1e1e; }
-.vtable td { font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #a0a0a0; padding: 0.6rem 0.6rem; border-bottom: 1px solid #1a1a1a; }
-.vtable tbody tr:last-child td { border-bottom: none; }
-.v-rsid { color: #2563eb !important; } .v-star { color: #7c3aed !important; }
-.v-nofunc { color: #dc2626 !important; } .v-dec { color: #d97706 !important; }
-.v-inc { color: #2563eb !important; } .v-norm { color: #16a34a !important; }
-.rec-box { border-radius: 8px; border: 1px solid; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
-.rec-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.45rem; }
-.rec-text { font-size: 0.975rem; line-height: 1.75; color: #b0b0b0; }
-.alt-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-.alt-chip { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: #a0a0a0; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 100px; padding: 4px 12px; }
-.ai-block { border: 1px solid #222; border-radius: 8px; overflow: hidden; margin-top: 1.35rem; }
-.ai-header { padding: 0.7rem 1.1rem; background: #0e0e0e; border-bottom: 1px solid #222; display: flex; align-items: center; gap: 0.65rem; }
-.ai-badge { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: #6b7280; background: #1e1e1e; padding: 3px 9px; border-radius: 4px; }
-.ai-badge-static { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: #9ca3af; background: #1a1a1a; border: 1px solid #2a2a2a; padding: 3px 9px; border-radius: 4px; }
-.ai-section { padding: 1rem 1.1rem; border-bottom: 1px solid #1e1e1e; }
-.ai-section:last-child { border-bottom: none; }
-.ai-section-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; margin-bottom: 0.45rem; }
-.ai-section-text { font-size: 0.975rem; line-height: 1.8; color: #b0b0b0; }
-.alert { border-radius: 8px; border: 1px solid; border-left-width: 3px; padding: 1rem 1.1rem; margin-bottom: 1rem; display: flex; gap: 0.85rem; align-items: flex-start; }
-.alert-label { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 0.3rem; }
-.alert-text { font-size: 0.95rem; line-height: 1.7; }
-.ix-row { display: flex; align-items: flex-start; gap: 0.875rem; padding: 1.1rem; border: 1px solid #1e1e1e; border-radius: 8px; margin-bottom: 0.5rem; background: #111; }
-.ix-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
-.ix-title { font-size: 0.975rem; font-weight: 600; color: #e8e8e8; margin-bottom: 0.3rem; }
-.ix-msg { font-size: 0.9rem; color: #525252; line-height: 1.65; margin-bottom: 0.45rem; }
-.ix-rec { font-size: 0.875rem; color: #8a8a8a; line-height: 1.6; }
-.ix-sev { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; margin-left: auto; flex-shrink: 0; align-self: flex-start; }
-.empty { text-align: center; padding: 5rem 2rem; border: 1px dashed #222; border-radius: 12px; background: #0e0e0e; }
-.empty-icon { font-family: 'Instrument Serif', serif; font-size: 2.75rem; color: #d1d5db; margin-bottom: 1rem; }
-.empty-title { font-family: 'Geist', sans-serif; font-size: 1.2rem; font-weight: 500; color: #333; margin-bottom: 0.5rem; }
-.empty-hint { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: #2a2a2a; letter-spacing: 0.06em; line-height: 2.1; }
-.test-card { background: #111; border: 1px solid #1e1e1e; border-radius: 10px; padding: 1.2rem; }
-.test-name { font-size: 0.95rem; font-weight: 600; color: #e0e0e0; margin-bottom: 0.4rem; }
-.test-desc { font-family: 'DM Mono', monospace; font-size: 0.66rem; color: #3a3a3a; letter-spacing: 0.04em; margin-bottom: 0.85rem; line-height: 1.75; }
-.test-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 4px; }
-.test-drug { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: #3a3a3a; width: 90px; flex-shrink: 0; }
-.test-result { font-family: 'DM Mono', monospace; font-size: 0.7rem; font-weight: 500; }
-.rt-wrap { border: 1px solid #1e1e1e; border-radius: 10px; overflow: hidden; background: #0e0e0e; margin-bottom: 1rem; }
-.rt-head { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px; background: #0a0a0a; border-bottom: 1px solid #1e1e1e; padding: 0 0.5rem; }
-.rt-hcell { font-family: 'DM Mono', monospace; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: #484848; padding: 0.75rem 0.85rem; }
-.rt-row { display: grid; grid-template-columns: 1fr 1.2fr 1.2fr 1.5fr 40px; border-bottom: 1px solid #141414; padding: 0 0.5rem; }
-.rt-row:last-child { border-bottom: none; }
-.rt-cell { font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #909090; padding: 0.75rem 0.85rem; display: flex; align-items: center; }
-.steps-row { display: flex; gap: 0; border: 1px solid #1e1e1e; border-radius: 10px; overflow: hidden; margin-bottom: 2.5rem; background: #0e0e0e; }
-.step-item { flex: 1; padding: 1rem 1.35rem; border-right: 1px solid #1e1e1e; }
-.step-item:last-child { border-right: none; }
-.step-num { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.1em; color: #d1d5db; margin-bottom: 4px; text-transform: uppercase; }
-.step-label { font-size: 0.9rem; font-weight: 500; color: #2a2a2a; }
-.step-item.active .step-num { color: #e0e0e0; }
-.step-item.active .step-label { color: #e0e0e0; }
-.stButton > button { background: #f0f0f0 !important; color: #111 !important; border: none !important; border-radius: 8px !important; font-family: 'Geist', sans-serif !important; font-weight: 500 !important; font-size: 0.975rem !important; padding: 0.7rem 1.75rem !important; letter-spacing: -0.01em !important; transition: opacity 0.15s !important; }
-.stButton > button:hover { opacity: 0.8 !important; }
-.stDownloadButton > button { background: #141414 !important; color: #909090 !important; border: 1px solid #2a2a2a !important; border-radius: 8px !important; font-family: 'DM Mono', monospace !important; font-size: 0.75rem !important; letter-spacing: 0.04em !important; padding: 0.55rem 1.1rem !important; }
-.stDownloadButton > button:hover { border-color: #f0f0f0 !important; color: #f0f0f0 !important; }
-.stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1e1e1e !important; gap: 0 !important; padding: 0 !important; margin-bottom: 2rem !important; box-shadow: none !important; }
-.stTabs [data-baseweb="tab"] { font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: #3a3a3a !important; padding: 0.85rem 1.35rem !important; background: transparent !important; border: none !important; border-bottom: 2px solid transparent !important; border-radius: 0 !important; }
-.stTabs [aria-selected="true"] { color: #f0f0f0 !important; border-bottom-color: #f0f0f0 !important; font-weight: 600 !important; }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 0 !important; }
-div[data-testid="stExpander"] { background: #111 !important; border: 1px solid #1e1e1e !important; border-radius: 8px !important; box-shadow: none !important; margin-bottom: 0.5rem !important; }
-div[data-testid="stExpander"] summary { font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.07em !important; color: #444 !important; padding: 0.85rem 1.1rem !important; }
-.stMultiSelect span[data-baseweb="tag"] { background: #1e1e1e !important; color: #909090 !important; border: 1px solid #2a2a2a !important; font-family: 'DM Mono', monospace !important; font-size: 0.72rem !important; border-radius: 4px !important; }
-.stCheckbox label p { font-family: 'Geist', sans-serif !important; font-size: 0.975rem !important; color: #909090 !important; }
-.stTextInput > div > div > input { border-radius: 8px !important; border: 1px solid #e5e7eb !important; font-family: 'DM Mono', monospace !important; font-size: 0.875rem !important; }
-.stFileUploader > div { border-radius: 8px !important; border: 1px dashed #e5e7eb !important; background: #0a0a0a !important; }
-.stSuccess { border-radius: 8px !important; font-family: 'Geist', sans-serif !important; font-size: 0.975rem !important; border: 1px solid !important; background: #f0fdf4 !important; border-color: #bbf7d0 !important; color: #166534 !important; }
-.stError { border-radius: 8px !important; background: #fef2f2 !important; border: 1px solid #fecaca !important; color: #991b1b !important; }
-[data-testid="stSidebar"] { background: #0a0a0a !important; border-right: 1px solid #1e1e1e !important; }
-[data-testid="stSidebar"] * { color: #606060 !important; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body,[class*="css"]{font-family:'Geist',-apple-system,sans-serif!important;background:#0a0a0a!important;color:#f0f0f0!important;font-size:16px!important;}
+.stApp{background:#0a0a0a!important;}
+.main .block-container{padding:0 3rem 6rem!important;max-width:1200px!important;}
+#MainMenu,footer,header{visibility:hidden;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+@keyframes glow{0%,100%{box-shadow:0 0 6px var(--c);}50%{box-shadow:0 0 18px var(--c);}}
+
+/* NAV */
+.pg-nav{padding:2rem 0 2.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a;margin-bottom:3rem;}
+.pg-wordmark{font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;letter-spacing:-0.02em;}
+.pg-wordmark em{font-style:italic;color:#6b7280;}
+.pg-pill{font-family:'DM Mono',monospace;font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:#6b7280;background:#1a1a1a;border:1px solid #2a2a2a;padding:5px 12px;border-radius:100px;}
+.pg-pill-hot{background:#7c3aed18;border-color:#7c3aed;color:#a78bfa;}
+
+/* POLYGENIC SCORE */
+.pgx-wrap{background:linear-gradient(135deg,#0f0f23 0%,#1a0a2e 50%,#0a1628 100%);border:1px solid #2a2a4a;border-radius:16px;padding:2rem;margin-bottom:1.5rem;position:relative;overflow:hidden;}
+.pgx-wrap::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;background:radial-gradient(circle,#7c3aed18 0%,transparent 70%);pointer-events:none;}
+.pgx-title{font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:#7c3aed;margin-bottom:0.5rem;}
+.pgx-score{font-family:'Instrument Serif',serif;font-size:4rem;line-height:1;margin-bottom:0.2rem;}
+.pgx-label{font-size:0.9rem;color:#6b7280;margin-bottom:1.25rem;}
+.pgx-track{height:6px;background:#1e1e1e;border-radius:3px;overflow:hidden;margin-bottom:0.4rem;}
+.pgx-fill{height:100%;border-radius:3px;}
+.pgx-scale{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:0.58rem;color:#2a2a2a;}
+.pgx-pills{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:1rem;}
+.pgx-pill{font-family:'DM Mono',monospace;font-size:0.63rem;letter-spacing:0.05em;padding:3px 10px;border-radius:100px;border:1px solid;}
+
+/* HEATMAP */
+.heatmap-wrap{background:#111;border:1px solid #1e1e1e;border-radius:16px;padding:1.5rem;margin-bottom:1.5rem;overflow-x:auto;}
+.heatmap-title{font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:#6b7280;margin-bottom:1.25rem;}
+.hm-grid{display:grid;gap:4px;}
+.hm-cell{border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.6rem 0.4rem;transition:transform .15s,box-shadow .15s;min-height:56px;cursor:default;}
+.hm-cell:hover{transform:scale(1.1);z-index:10;position:relative;}
+.hm-drug{font-family:'DM Mono',monospace;font-size:0.57rem;letter-spacing:0.04em;font-weight:600;margin-bottom:2px;}
+.hm-risk{font-family:'DM Mono',monospace;font-size:0.54rem;opacity:0.8;}
+.hm-header{font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;color:#484848;display:flex;align-items:center;justify-content:center;}
+.hm-legend{display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;}
+.hm-legend-item{font-family:'DM Mono',monospace;font-size:0.6rem;display:flex;align-items:center;gap:5px;color:#6b7280;}
+.hm-legend-dot{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+/* CHROMOSOME VIZ */
+.chrom-wrap{background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1rem;}
+.chrom-title{font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#484848;margin-bottom:0.75rem;}
+.chrom-row{display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;}
+.chrom-label{font-family:'DM Mono',monospace;font-size:0.65rem;color:#6b7280;width:20px;text-align:right;flex-shrink:0;}
+.chrom-bar{flex:1;height:14px;background:#1e1e1e;border-radius:7px;position:relative;overflow:visible;}
+.chrom-body{position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,#2a2a3a,#3a3a4a,#2a2a3a);border-radius:7px;}
+.chrom-marker{position:absolute;top:-4px;width:3px;height:22px;border-radius:2px;transform:translateX(-50%);}
+.chrom-gene{font-family:'DM Mono',monospace;font-size:0.58rem;color:#9ca3af;width:58px;flex-shrink:0;}
+.chrom-band{font-family:'DM Mono',monospace;font-size:0.58rem;color:#4b4b4b;}
+
+/* POPULATION FREQUENCY */
+.pop-wrap{background:#0e0e0e;border:1px solid #1a1a1a;border-radius:10px;padding:1rem 1.25rem;margin-bottom:0.75rem;}
+.pop-title{font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:#484848;margin-bottom:0.5rem;}
+.pop-row{display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem;}
+.pop-phenotype{font-family:'DM Mono',monospace;font-size:0.68rem;color:#6b7280;width:100px;flex-shrink:0;}
+.pop-track{flex:1;height:5px;background:#1e1e1e;border-radius:3px;overflow:hidden;}
+.pop-fill{height:100%;border-radius:3px;}
+.pop-pct{font-family:'DM Mono',monospace;font-size:0.63rem;color:#4b4b4b;width:32px;text-align:right;}
+.pop-you{font-family:'DM Mono',monospace;font-size:0.56rem;color:#f59e0b;margin-left:4px;}
+
+/* PATIENT MODE */
+.pt-header{border-radius:14px;padding:1.5rem;margin-bottom:1.5rem;border:2px solid;}
+.pt-card{border-radius:14px;padding:1.5rem;margin-bottom:1rem;border:1px solid;}
+.pt-drug{font-size:1.35rem;font-weight:700;color:#f0f0f0;margin-bottom:0.25rem;}
+.pt-verdict{font-size:1.1rem;line-height:1.6;margin-bottom:0.6rem;}
+.pt-pheno{font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.06em;margin-bottom:0.6rem;}
+.pt-explain{font-size:0.92rem;line-height:1.8;color:#9ca3af;}
+.pt-action{display:flex;align-items:flex-start;gap:0.6rem;background:#0a0a0a;border:1px solid #1e1e1e;border-radius:8px;padding:0.875rem 1rem;margin-top:0.75rem;}
+.pt-action-text{font-size:0.9rem;color:#e0e0e0;line-height:1.6;}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#1e1e1e;border:1px solid #1e1e1e;border-radius:12px;overflow:hidden;margin-bottom:1.5rem;}
+.stat-cell{background:#141414;padding:1.35rem 1.5rem;}
+.stat-val{font-family:'Instrument Serif',serif;font-size:2.25rem;color:#f0f0f0;line-height:1;margin-bottom:0.3rem;}
+.stat-key{font-family:'DM Mono',monospace;font-size:0.67rem;letter-spacing:0.1em;text-transform:uppercase;color:#525252;}
+.stat-sub{font-size:0.8rem;color:#4b4b4b;margin-top:0.25rem;}
+
+/* CARDS */
+.rcard{border:1px solid #222;border-radius:12px;background:#111;margin-bottom:1rem;overflow:hidden;}
+.rcard-top{padding:1.35rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e1e1e;}
+.rcard-left{display:flex;align-items:center;gap:0.875rem;}
+.rcard-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.rcard-name{font-family:'Geist',sans-serif;font-size:1.1rem;font-weight:600;color:#f0f0f0;letter-spacing:-0.01em;}
+.rcard-meta{font-family:'DM Mono',monospace;font-size:0.72rem;color:#4b4b4b;margin-top:3px;letter-spacing:0.04em;}
+.rcard-badge{font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;padding:5px 14px;border-radius:100px;border:1px solid;}
+.rcard-body{padding:1.35rem 1.5rem;}
+.mc-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1a1a1a;border-radius:8px;overflow:hidden;margin-bottom:1.35rem;}
+.mc-cell{background:#0e0e0e;padding:1rem 1.1rem;}
+.mc-key{font-family:'DM Mono',monospace;font-size:0.63rem;letter-spacing:0.1em;text-transform:uppercase;color:#484848;margin-bottom:0.35rem;}
+.mc-val{font-family:'Geist',sans-serif;font-size:1.05rem;font-weight:600;color:#e8e8e8;}
+.conf-wrap{margin-bottom:1.35rem;}
+.conf-header{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:0.68rem;letter-spacing:0.08em;color:#484848;margin-bottom:7px;}
+.conf-track{height:3px;background:#1e1e1e;border-radius:2px;overflow:hidden;}
+.conf-fill{height:100%;border-radius:2px;}
+.h-rule{border:none;border-top:1px solid #1e1e1e;margin:1.35rem 0;}
+.inline-label{font-family:'DM Mono',monospace;font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;color:#484848;margin-bottom:0.65rem;}
+.section-label{font-family:'DM Mono',monospace;font-size:0.7rem;letter-spacing:0.12em;text-transform:uppercase;color:#6b7280;margin-bottom:0.75rem;}
+.vtable{width:100%;border-collapse:collapse;}
+.vtable th{font-family:'DM Mono',monospace;font-size:0.66rem;letter-spacing:0.09em;text-transform:uppercase;color:#484848;padding:0 0.6rem 0.6rem;text-align:left;border-bottom:1px solid #1e1e1e;}
+.vtable td{font-family:'DM Mono',monospace;font-size:0.8rem;color:#a0a0a0;padding:0.6rem;border-bottom:1px solid #1a1a1a;}
+.vtable tbody tr:last-child td{border-bottom:none;}
+.v-rsid{color:#2563eb!important;}.v-star{color:#7c3aed!important;}
+.v-nofunc{color:#dc2626!important;}.v-dec{color:#d97706!important;}
+.v-inc{color:#2563eb!important;}.v-norm{color:#16a34a!important;}
+.rec-box{border-radius:8px;border:1px solid;padding:1.1rem 1.25rem;margin-bottom:1rem;}
+.rec-label{font-family:'DM Mono',monospace;font-size:0.66rem;letter-spacing:0.09em;text-transform:uppercase;margin-bottom:0.45rem;}
+.rec-text{font-size:0.975rem;line-height:1.75;color:#b0b0b0;}
+.alt-chips{display:flex;flex-wrap:wrap;gap:0.45rem;}
+.alt-chip{font-family:'DM Mono',monospace;font-size:0.72rem;color:#a0a0a0;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:100px;padding:4px 12px;}
+.ai-block{border:1px solid #222;border-radius:8px;overflow:hidden;margin-top:1.35rem;}
+.ai-header{padding:0.7rem 1.1rem;background:#0e0e0e;border-bottom:1px solid #222;display:flex;align-items:center;gap:0.65rem;}
+.ai-badge{font-family:'DM Mono',monospace;font-size:0.63rem;letter-spacing:0.09em;text-transform:uppercase;color:#6b7280;background:#1e1e1e;padding:3px 9px;border-radius:4px;}
+.ai-badge-static{font-family:'DM Mono',monospace;font-size:0.63rem;letter-spacing:0.09em;text-transform:uppercase;color:#9ca3af;background:#1a1a1a;border:1px solid #2a2a2a;padding:3px 9px;border-radius:4px;}
+.ai-section{padding:1rem 1.1rem;border-bottom:1px solid #1e1e1e;}
+.ai-section:last-child{border-bottom:none;}
+.ai-section-label{font-family:'DM Mono',monospace;font-size:0.66rem;letter-spacing:0.09em;text-transform:uppercase;color:#484848;margin-bottom:0.45rem;}
+.ai-section-text{font-size:0.975rem;line-height:1.8;color:#b0b0b0;}
+.alert{border-radius:8px;border:1px solid;border-left-width:3px;padding:1rem 1.1rem;margin-bottom:1rem;display:flex;gap:0.85rem;align-items:flex-start;}
+.alert-label{font-family:'DM Mono',monospace;font-size:0.66rem;letter-spacing:0.09em;text-transform:uppercase;margin-bottom:0.3rem;}
+.alert-text{font-size:0.95rem;line-height:1.7;}
+.ix-row{display:flex;align-items:flex-start;gap:0.875rem;padding:1.1rem;border:1px solid #1e1e1e;border-radius:8px;margin-bottom:0.5rem;background:#111;}
+.ix-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:6px;}
+.ix-title{font-size:0.975rem;font-weight:600;color:#e8e8e8;margin-bottom:0.3rem;}
+.ix-msg{font-size:0.9rem;color:#525252;line-height:1.65;margin-bottom:0.45rem;}
+.ix-rec{font-size:0.875rem;color:#8a8a8a;line-height:1.6;}
+.ix-sev{font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.08em;text-transform:uppercase;padding:3px 10px;border-radius:4px;margin-left:auto;flex-shrink:0;align-self:flex-start;}
+.empty{text-align:center;padding:5rem 2rem;border:1px dashed #222;border-radius:12px;background:#0e0e0e;}
+.empty-icon{font-family:'Instrument Serif',serif;font-size:2.75rem;color:#d1d5db;margin-bottom:1rem;}
+.empty-title{font-family:'Geist',sans-serif;font-size:1.2rem;font-weight:500;color:#333;margin-bottom:0.5rem;}
+.empty-hint{font-family:'DM Mono',monospace;font-size:0.7rem;color:#2a2a2a;letter-spacing:0.06em;line-height:2.1;}
+.test-card{background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:1.2rem;}
+.test-name{font-size:0.95rem;font-weight:600;color:#e0e0e0;margin-bottom:0.4rem;}
+.test-desc{font-family:'DM Mono',monospace;font-size:0.66rem;color:#3a3a3a;letter-spacing:0.04em;margin-bottom:0.85rem;line-height:1.75;}
+.test-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:4px;}
+.test-drug{font-family:'DM Mono',monospace;font-size:0.7rem;color:#3a3a3a;width:90px;flex-shrink:0;}
+.test-result{font-family:'DM Mono',monospace;font-size:0.7rem;font-weight:500;}
+.rt-wrap{border:1px solid #1e1e1e;border-radius:10px;overflow:hidden;background:#0e0e0e;margin-bottom:1rem;}
+.rt-head{display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1.5fr 40px;background:#0a0a0a;border-bottom:1px solid #1e1e1e;padding:0 0.5rem;}
+.rt-hcell{font-family:'DM Mono',monospace;font-size:0.66rem;letter-spacing:0.09em;text-transform:uppercase;color:#484848;padding:0.75rem 0.85rem;}
+.rt-row{display:grid;grid-template-columns:1fr 1.2fr 1.2fr 1.5fr 40px;border-bottom:1px solid #141414;padding:0 0.5rem;}
+.rt-row:last-child{border-bottom:none;}
+.rt-cell{font-family:'DM Mono',monospace;font-size:0.8rem;color:#909090;padding:0.75rem 0.85rem;display:flex;align-items:center;}
+.steps-row{display:flex;gap:0;border:1px solid #1e1e1e;border-radius:10px;overflow:hidden;margin-bottom:2.5rem;background:#0e0e0e;}
+.step-item{flex:1;padding:1rem 1.35rem;border-right:1px solid #1e1e1e;}
+.step-item:last-child{border-right:none;}
+.step-num{font-family:'DM Mono',monospace;font-size:0.63rem;letter-spacing:0.1em;color:#d1d5db;margin-bottom:4px;text-transform:uppercase;}
+.step-label{font-size:0.9rem;font-weight:500;color:#2a2a2a;}
+.step-item.active .step-num{color:#e0e0e0;}
+.step-item.active .step-label{color:#e0e0e0;}
+.stButton>button{background:#f0f0f0!important;color:#111!important;border:none!important;border-radius:8px!important;font-family:'Geist',sans-serif!important;font-weight:500!important;font-size:0.975rem!important;padding:0.7rem 1.75rem!important;letter-spacing:-0.01em!important;transition:opacity .15s!important;}
+.stButton>button:hover{opacity:0.8!important;}
+.stDownloadButton>button{background:#141414!important;color:#909090!important;border:1px solid #2a2a2a!important;border-radius:8px!important;font-family:'DM Mono',monospace!important;font-size:0.75rem!important;letter-spacing:0.04em!important;padding:0.55rem 1.1rem!important;}
+.stDownloadButton>button:hover{border-color:#f0f0f0!important;color:#f0f0f0!important;}
+.stTabs [data-baseweb="tab-list"]{background:transparent!important;border-bottom:1px solid #1e1e1e!important;gap:0!important;padding:0!important;margin-bottom:2rem!important;box-shadow:none!important;}
+.stTabs [data-baseweb="tab"]{font-family:'DM Mono',monospace!important;font-size:0.72rem!important;letter-spacing:0.1em!important;text-transform:uppercase!important;color:#3a3a3a!important;padding:0.85rem 1.35rem!important;background:transparent!important;border:none!important;border-bottom:2px solid transparent!important;border-radius:0!important;}
+.stTabs [aria-selected="true"]{color:#f0f0f0!important;border-bottom-color:#f0f0f0!important;font-weight:600!important;}
+.stTabs [data-baseweb="tab-panel"]{padding-top:0!important;}
+div[data-testid="stExpander"]{background:#111!important;border:1px solid #1e1e1e!important;border-radius:8px!important;box-shadow:none!important;margin-bottom:0.5rem!important;}
+div[data-testid="stExpander"] summary{font-family:'DM Mono',monospace!important;font-size:0.72rem!important;letter-spacing:0.07em!important;color:#444!important;padding:0.85rem 1.1rem!important;}
+.stMultiSelect span[data-baseweb="tag"]{background:#1e1e1e!important;color:#909090!important;border:1px solid #2a2a2a!important;font-family:'DM Mono',monospace!important;font-size:0.72rem!important;border-radius:4px!important;}
+.stCheckbox label p{font-family:'Geist',sans-serif!important;font-size:0.975rem!important;color:#909090!important;}
+.stTextInput>div>div>input{border-radius:8px!important;border:1px solid #e5e7eb!important;font-family:'DM Mono',monospace!important;font-size:0.875rem!important;}
+.stFileUploader>div{border-radius:8px!important;border:1px dashed #e5e7eb!important;background:#0a0a0a!important;}
+[data-testid="stSidebar"]{background:#0a0a0a!important;border-right:1px solid #1e1e1e!important;}
+[data-testid="stSidebar"] *{color:#606060!important;}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── Helpers ────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# HELPERS
+# ══════════════════════════════════════════════════════════════
+
 def load_vcf_file(filename):
     path = os.path.join(BASE_DIR, "sample_data", filename)
     return open(path).read() if os.path.exists(path) else get_sample_vcf()
 
-
-def run_pipeline(vcf_content, drugs, pid, groq_key, run_ix=True, gen_pdf=True):
+def run_pipeline(vcf_content, drugs, pid, groq_key, run_ix=True, gen_pdf=True, skip_llm=False):
     parsed_vcf   = parse_vcf(vcf_content)
     risk_results = run_risk_assessment(parsed_vcf, drugs)
-    # Always generate explanations — static templates fire if API is unavailable
-    risk_results = generate_all_explanations(groq_key, risk_results)
+    risk_results = generate_all_explanations(groq_key, risk_results, skip_llm=skip_llm)
     all_outputs  = [
         build_output_schema(patient_id=pid, drug=r["drug"], result=r,
                             parsed_vcf=parsed_vcf, llm_exp=r.get("llm_explanation", {}))
@@ -178,29 +313,214 @@ def run_pipeline(vcf_content, drugs, pid, groq_key, run_ix=True, gen_pdf=True):
             st.warning(f"PDF generation skipped: {e}")
     return parsed_vcf, risk_results, all_outputs, ix_report, pdf_bytes
 
-
 def func_css(status):
     s = (status or "").lower()
-    if "no_function"  in s: return "v-nofunc"
-    if "decreased"    in s: return "v-dec"
-    if "increased"    in s: return "v-inc"
+    if "no_function" in s: return "v-nofunc"
+    if "decreased"   in s: return "v-dec"
+    if "increased"   in s: return "v-inc"
     return "v-norm"
 
 
-SEV_PALETTE = {
-    "low":      {"dot": "#f59e0b", "bg": "#fffbeb", "border": "#fde68a", "text": "#b45309"},
-    "moderate": {"dot": "#f97316", "bg": "#fff7ed", "border": "#fed7aa", "text": "#c2410c"},
-    "high":     {"dot": "#ef4444", "bg": "#fef2f2", "border": "#fecaca", "text": "#b91c1c"},
-    "critical": {"dot": "#dc2626", "bg": "#fef2f2", "border": "#fca5a5", "text": "#991b1b"},
-}
-IX_PALETTE = {"low": "#f59e0b", "moderate": "#f97316", "high": "#ef4444", "critical": "#dc2626"}
+# ══════════════════════════════════════════════════════════════
+# FEATURE 1 — POLYGENIC RISK SCORE
+# ══════════════════════════════════════════════════════════════
+
+def compute_polygenic_score(all_outputs):
+    SEV_S  = {"none": 0, "low": 20, "moderate": 45, "high": 70, "critical": 100}
+    RISK_S = {"Safe": 0, "Adjust Dosage": 35, "Toxic": 85, "Ineffective": 70, "Unknown": 20}
+    W      = {"FLUOROURACIL": 1.4, "AZATHIOPRINE": 1.3, "CLOPIDOGREL": 1.3,
+               "WARFARIN": 1.2, "CODEINE": 1.1, "SIMVASTATIN": 1.0}
+    if not all_outputs:
+        return 0, "No data", []
+    tw, ws, breakdown = 0, 0, []
+    for out in all_outputs:
+        drug  = out["drug"]
+        sev   = out["risk_assessment"]["severity"]
+        rl    = out["risk_assessment"]["risk_label"]
+        gene  = out["pharmacogenomic_profile"]["primary_gene"]
+        pheno = out["pharmacogenomic_profile"]["phenotype"]
+        sc    = (SEV_S.get(sev, 0) + RISK_S.get(rl, 0)) / 2
+        wt    = W.get(drug, 1.0)
+        ws   += sc * wt; tw += wt
+        breakdown.append((gene, drug, pheno, rl, sc))
+    final = min(100, int(ws / tw)) if tw else 0
+    label = (["Low Risk","Moderate Risk","High Risk","Very High Risk","Critical Risk"]
+             [min(4, final // 20)])
+    return final, label, breakdown
+
+def render_polygenic_score(all_outputs):
+    score, label, breakdown = compute_polygenic_score(all_outputs)
+    color = (["#22c55e","#f59e0b","#f97316","#ef4444","#dc2626"]
+             [min(4, score // 20)])
+    pills = ""
+    for gene, drug, pheno, rl, _ in breakdown:
+        rc = HEATMAP_COLORS.get(rl, HEATMAP_COLORS["Unknown"])
+        pills += f'<span class="pgx-pill" style="background:{rc["bg"]};border-color:{rc["border"]};color:{rc["text"]};">{gene} · {pheno}</span>'
+    st.markdown(f"""
+    <div class="pgx-wrap">
+      <div class="pgx-title">⬡ Polygenic Risk Score</div>
+      <div class="pgx-score" style="color:{color};">{score}</div>
+      <div class="pgx-label">{label} — composite across {len(all_outputs)} drug{"s" if len(all_outputs)!=1 else ""} &amp; genes</div>
+      <div class="pgx-track"><div class="pgx-fill" style="width:{score}%;background:linear-gradient(90deg,{color}88,{color});box-shadow:0 0 12px {color}55;"></div></div>
+      <div class="pgx-scale"><span>0 — No Risk</span><span>50 — High</span><span>100 — Critical</span></div>
+      <div class="pgx-pills">{pills}</div>
+    </div>""", unsafe_allow_html=True)
 
 
-def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
-    overall_sev = max(
-        (o["risk_assessment"]["severity"] for o in all_outputs),
-        key=lambda s: SEV_RANK.get(s, 0), default="none"
-    )
+# ══════════════════════════════════════════════════════════════
+# FEATURE 2 — DRUG × GENE HEATMAP
+# ══════════════════════════════════════════════════════════════
+
+def render_heatmap(all_outputs):
+    DRUG_ORDER = ["CODEINE","WARFARIN","CLOPIDOGREL","SIMVASTATIN","AZATHIOPRINE","FLUOROURACIL"]
+    GENE_ORDER = ["CYP2D6","CYP2C9","CYP2C19","SLCO1B1","TPMT","DPYD"]
+    DG = {"CODEINE":"CYP2D6","WARFARIN":"CYP2C9","CLOPIDOGREL":"CYP2C19",
+          "SIMVASTATIN":"SLCO1B1","AZATHIOPRINE":"TPMT","FLUOROURACIL":"DPYD"}
+    rmap = {o["drug"]: o for o in all_outputs}
+    drugs = [d for d in DRUG_ORDER if d in rmap]
+    if not drugs: return
+    n = len(drugs)
+    hdrs = '<div class="hm-header" style="padding:0.4rem;"></div>'
+    for d in drugs:
+        hdrs += f'<div class="hm-header">{d[:5]}</div>'
+    rows = ""
+    for gene in GENE_ORDER:
+        rows += f'<div class="hm-header" style="justify-content:flex-end;padding-right:0.5rem;color:#6b7280;font-size:0.58rem;">{gene}</div>'
+        for d in drugs:
+            if DG.get(d) == gene and d in rmap:
+                out = rmap[d]; rl = out["risk_assessment"]["risk_label"]
+                ph  = out["pharmacogenomic_profile"]["phenotype"]
+                rc  = HEATMAP_COLORS.get(rl, HEATMAP_COLORS["Unknown"])
+                sh  = {"Adjust Dosage":"Adjust","Ineffective":"Ineffect.","Unknown":"?"}.get(rl, rl)
+                rows += f'<div class="hm-cell" style="background:{rc["bg"]};border:1px solid {rc["border"]};" title="{d}×{gene}: {rl} ({ph})"><div class="hm-drug" style="color:{rc["text"]};">{sh}</div><div class="hm-risk" style="color:{rc["text"]};">{ph}</div></div>'
+            else:
+                rc = HEATMAP_COLORS["N/A"]
+                rows += f'<div class="hm-cell" style="background:{rc["bg"]};border:1px solid {rc["border"]};"><div class="hm-risk" style="color:{rc["text"]};">—</div></div>'
+    legend = "".join(f'<div class="hm-legend-item"><span class="hm-legend-dot" style="background:{HEATMAP_COLORS[r]["bg"]};border:1px solid {HEATMAP_COLORS[r]["border"]};"></span>{r}</div>' for r in ["Safe","Adjust Dosage","Toxic","Ineffective"])
+    st.markdown(f"""
+    <div class="heatmap-wrap">
+      <div class="heatmap-title">⬡ Drug × Gene Risk Matrix</div>
+      <div class="hm-grid" style="grid-template-columns:72px repeat({n},1fr);">{hdrs}{rows}</div>
+      <div class="hm-legend">{legend}</div>
+    </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# FEATURE 3 — CHROMOSOME VISUALIZATION
+# ══════════════════════════════════════════════════════════════
+
+def render_chromosome_viz(all_outputs, parsed_vcf):
+    detected = set(parsed_vcf.get("detected_genes", []))
+    rmap     = {o["pharmacogenomic_profile"]["primary_gene"]: o for o in all_outputs}
+    rows = ""
+    for gene, info in CHROM_INFO.items():
+        ch  = info["chrom"]; pos = info["pos_mb"]
+        pct = (pos / CHROM_LENGTHS_MB.get(ch, 200)) * 100
+        if gene in rmap:
+            rl    = rmap[gene]["risk_assessment"]["risk_label"]
+            mc    = RISK_CONFIG.get(rl, RISK_CONFIG["Unknown"])["dot"]
+            pulse = "animation:pulse 2s infinite;"
+        elif gene in detected:
+            mc = "#6b7280"; pulse = ""
+        else:
+            mc = "#2a2a2a"; pulse = ""
+        rows += f"""<div class="chrom-row">
+          <div class="chrom-label">{ch}</div>
+          <div class="chrom-bar"><div class="chrom-body"></div>
+            <div class="chrom-marker" style="left:{pct}%;background:{mc};{pulse}box-shadow:0 0 8px {mc}88;"></div>
+          </div>
+          <div class="chrom-gene">{gene}</div>
+          <div class="chrom-band">{info['band']}</div>
+        </div>"""
+    st.markdown(f"""
+    <div class="chrom-wrap">
+      <div class="chrom-title">⬡ Variant Chromosome Locations</div>
+      {rows}
+      <div style="font-family:'DM Mono',monospace;font-size:0.56rem;color:#2a2a2a;margin-top:0.6rem;">Glowing markers = variants detected in this VCF</div>
+    </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# FEATURE 4 — POPULATION FREQUENCY
+# ══════════════════════════════════════════════════════════════
+
+def render_population_frequency(gene, phenotype):
+    freq = POPULATION_FREQUENCY.get(gene, {})
+    if not freq: return
+    rows = ""
+    for ph, pct in sorted(freq.items(), key=lambda x: -x[1]):
+        is_you = (ph == phenotype)
+        bc = "#7c3aed" if is_you else "#2a2a2a"
+        tc = "#a78bfa" if is_you else "#6b7280"
+        you = '<span class="pop-you">← YOU</span>' if is_you else ""
+        rows += f"""<div class="pop-row">
+          <div class="pop-phenotype" style="color:{tc};">{ph}</div>
+          <div class="pop-track"><div class="pop-fill" style="width:{min(pct,100)}%;background:{bc};"></div></div>
+          <div class="pop-pct" style="color:{tc};">{pct}%{you}</div>
+        </div>"""
+    st.markdown(f"""
+    <div class="pop-wrap">
+      <div class="pop-title">{gene} — Population Frequency</div>
+      {rows}
+    </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# FEATURE 5 — PATIENT PLAIN-ENGLISH MODE
+# ══════════════════════════════════════════════════════════════
+
+def render_patient_mode(all_outputs):
+    risks = [o["risk_assessment"]["risk_label"] for o in all_outputs]
+    bad   = any(r in ("Toxic","Ineffective") for r in risks)
+    hc    = "#dc2626" if bad else "#16a34a"
+    icon  = "🚨" if bad else "✅"
+    msg   = "Important: Some medications need attention" if bad else "Good news: Your medications look safe"
+    st.markdown(f"""
+    <div class="pt-header" style="background:#0f0f0f;border-color:{hc}33;">
+      <div style="font-size:1.3rem;font-weight:700;color:{hc};margin-bottom:0.4rem;">{icon} {msg}</div>
+      <div style="font-size:0.9rem;color:#6b7280;line-height:1.7;">
+        This report analysed your DNA to see how your body handles certain medicines.
+        Everyone's body is different — your genes affect how medicines work for you.
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    for out in all_outputs:
+        drug  = out["drug"]; rl = out["risk_assessment"]["risk_label"]
+        gene  = out["pharmacogenomic_profile"]["primary_gene"]
+        pheno = out["pharmacogenomic_profile"]["phenotype"]
+        alts  = out["clinical_recommendation"].get("alternative_drugs", [])
+        pheno_plain = PLAIN_ENGLISH_PHENOTYPE.get(pheno, pheno)
+        explain     = RISK_PLAIN_ENGLISH.get((drug, pheno), "")
+        VERDICT     = {"Safe":"✅ This medicine is likely safe for you",
+                       "Adjust Dosage":"⚠️ You may need a different dose of this medicine",
+                       "Toxic":"🚨 This medicine could be harmful to you",
+                       "Ineffective":"❌ This medicine likely won't work for you",
+                       "Unknown":"❓ We need more information about this medicine"}
+        verdict = VERDICT.get(rl, rl)
+        bc = {"Safe":"#16a34a","Adjust Dosage":"#b45309","Toxic":"#dc2626","Ineffective":"#7c3aed"}.get(rl,"#6b7280")
+        vc = {"Safe":"#d1fae5","Adjust Dosage":"#fef3c7","Toxic":"#fee2e2","Ineffective":"#ede9fe"}.get(rl,"#f0f0f0")
+        action = ""
+        if rl in ("Toxic","Ineffective"):
+            action = f'<div class="pt-action"><span style="font-size:1.1rem;">💊</span><div class="pt-action-text"><strong style="color:#f0f0f0;">Talk to your doctor before taking {drug.title()}.</strong><br>{f"They may suggest: {chr(44).join(alts[:3])}" if alts else "Ask about alternative medications."}</div></div>'
+        elif rl == "Adjust Dosage":
+            action = f'<div class="pt-action"><span style="font-size:1.1rem;">📋</span><div class="pt-action-text"><strong style="color:#f0f0f0;">Tell your doctor about this result before starting {drug.title()}.</strong><br>You may need a different dose than what\'s usually prescribed.</div></div>'
+        st.markdown(f"""
+        <div class="pt-card" style="background:#0f0f0f;border-color:{bc}33;">
+          <div class="pt-drug">{drug.title()}</div>
+          <div class="pt-verdict" style="color:{vc};">{verdict}</div>
+          <div class="pt-pheno" style="color:#484848;">{gene} · {pheno_plain}</div>
+          {f'<div class="pt-explain">{explain}</div>' if explain else ""}
+          {action}
+        </div>""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+# MAIN RESULTS RENDERER
+# ══════════════════════════════════════════════════════════════
+
+def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid, patient_mode=False):
+    overall_sev = max((o["risk_assessment"]["severity"] for o in all_outputs),
+                      key=lambda s: SEV_RANK.get(s, 0), default="none")
     sev_label = overall_sev.title() if overall_sev != "none" else "None"
     genes_str = " · ".join(parsed_vcf.get("detected_genes", [])) or "—"
 
@@ -216,7 +536,6 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
         <div class="stat-sub">{genes_str}</div></div>
     </div>""", unsafe_allow_html=True)
 
-    # Downloads
     dc1, dc2, dc3 = st.columns(3)
     with dc1:
         st.download_button("Download JSON", data=json.dumps(all_outputs, indent=2),
@@ -235,271 +554,217 @@ def render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid):
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # Interactions panel
+    if patient_mode:
+        render_patient_mode(all_outputs)
+        return
+
+    # ── New visual features ───────────────────────────────────
+    render_polygenic_score(all_outputs)
+
+    col_h, col_c = st.columns([1.4, 1], gap="large")
+    with col_h: render_heatmap(all_outputs)
+    with col_c: render_chromosome_viz(all_outputs, parsed_vcf)
+
+    # ── Interactions ──────────────────────────────────────────
     if ix_report and ix_report["interactions_found"]:
         with st.expander(f"Drug–Drug Interactions  ·  {ix_report['total_interactions']} found", expanded=True):
             for ix in ix_report["all_interactions"]:
-                sev   = ix.get("severity", "low")
-                color = IX_PALETTE.get(sev, "#94a3b8")
-                drugs_str = " + ".join(
-                    ix.get("drugs_involved", []) or
-                    [ix.get("inhibitor_drug", "")] + ix.get("affected_drugs", [])
-                )
-                st.markdown(f"""
-                <div class="ix-row">
+                sev   = ix.get("severity","low")
+                color = IX_PALETTE.get(sev,"#94a3b8")
+                ds    = " + ".join(ix.get("drugs_involved",[]) or [ix.get("inhibitor_drug","")] + ix.get("affected_drugs",[]))
+                st.markdown(f"""<div class="ix-row">
                   <div class="ix-dot" style="background:{color};margin-top:6px;"></div>
                   <div style="flex:1;">
-                    <div class="ix-title">{drugs_str}</div>
-                    <div class="ix-msg">{ix.get('message', ix.get('mechanism', ''))}</div>
-                    <div class="ix-rec">💡 {ix.get('recommendation', '')}</div>
+                    <div class="ix-title">{ds}</div>
+                    <div class="ix-msg">{ix.get('message',ix.get('mechanism',''))}</div>
+                    <div class="ix-rec">💡 {ix.get('recommendation','')}</div>
                   </div>
                   <span class="ix-sev" style="background:{color}18;color:{color};">{sev.upper()}</span>
                 </div>""", unsafe_allow_html=True)
     elif ix_report:
-        st.markdown("""
-        <div style="padding:0.75rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;
-             border-radius:8px;font-size:0.8rem;color:#16a34a;margin-bottom:1rem;
-             font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.04em;">
-          ✓ No significant drug–drug interactions detected.</div>""", unsafe_allow_html=True)
+        st.markdown('<div style="padding:0.75rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:1rem;font-family:DM Mono,monospace;font-size:0.65rem;letter-spacing:0.04em;color:#16a34a;">✓ No significant drug–drug interactions detected.</div>', unsafe_allow_html=True)
 
-    # Per-drug cards
+    # ── Per-drug cards ────────────────────────────────────────
     for output in all_outputs:
-        risk_label  = output["risk_assessment"]["risk_label"]
-        drug_name   = output["drug"]
-        severity    = output["risk_assessment"]["severity"]
-        confidence  = output["risk_assessment"]["confidence_score"]
-        gene        = output["pharmacogenomic_profile"]["primary_gene"]
-        diplotype   = output["pharmacogenomic_profile"]["diplotype"]
-        phenotype   = output["pharmacogenomic_profile"]["phenotype"]
-        variants    = output["pharmacogenomic_profile"]["detected_variants"]
-        rec         = output["clinical_recommendation"]["dosing_recommendation"]
-        alts        = output["clinical_recommendation"].get("alternative_drugs", [])
-        monitoring  = output["clinical_recommendation"].get("monitoring_required", "")
-        exp         = output["llm_generated_explanation"]
-        rc          = RISK_CONFIG.get(risk_label, RISK_CONFIG["Unknown"])
-        sp          = SEV_PALETTE.get(severity, {})
+        rl   = output["risk_assessment"]["risk_label"]
+        dn   = output["drug"]
+        sev  = output["risk_assessment"]["severity"]
+        conf = output["risk_assessment"]["confidence_score"]
+        gene = output["pharmacogenomic_profile"]["primary_gene"]
+        dip  = output["pharmacogenomic_profile"]["diplotype"]
+        ph   = output["pharmacogenomic_profile"]["phenotype"]
+        var  = output["pharmacogenomic_profile"]["detected_variants"]
+        rec  = output["clinical_recommendation"]["dosing_recommendation"]
+        alts = output["clinical_recommendation"].get("alternative_drugs",[])
+        mon  = output["clinical_recommendation"].get("monitoring_required","")
+        exp  = output["llm_generated_explanation"]
+        rc   = RISK_CONFIG.get(rl, RISK_CONFIG["Unknown"])
+        sp   = SEV_PALETTE.get(sev, {})
 
-        if severity in ("critical", "high") and sp:
-            st.markdown(f"""
-            <div class="alert" style="background:{sp['bg']};border-color:{sp['border']};">
-              <span style="font-size:0.9rem;flex-shrink:0;">{'⛔' if severity=='critical' else '⚠️'}</span>
-              <div>
-                <div class="alert-label" style="color:{sp['text']};">{severity.title()} Alert — {drug_name}</div>
-                <div class="alert-text" style="color:{sp['text']};">{rec}</div>
-              </div>
+        if sev in ("critical","high") and sp:
+            st.markdown(f"""<div class="alert" style="background:{sp['bg']};border-color:{sp['border']};">
+              <span style="font-size:0.9rem;flex-shrink:0;">{'⛔' if sev=='critical' else '⚠️'}</span>
+              <div><div class="alert-label" style="color:{sp['text']};">{sev.title()} Alert — {dn}</div>
+              <div class="alert-text" style="color:{sp['text']};">{rec}</div></div>
             </div>""", unsafe_allow_html=True)
 
         st.markdown(f"""
         <div class="rcard">
           <div class="rcard-top">
             <div class="rcard-left">
-              <div class="rcard-dot" style="background:{rc['dot']};"></div>
-              <div>
-                <div class="rcard-name">{drug_name.title()}</div>
-                <div class="rcard-meta">{gene} · {diplotype} · {phenotype}</div>
-              </div>
+              <div class="rcard-dot" style="background:{rc['dot']};box-shadow:0 0 8px {rc['dot']}88;"></div>
+              <div><div class="rcard-name">{dn.title()}</div>
+              <div class="rcard-meta">{gene} · {dip} · {ph}</div></div>
             </div>
             <span class="rcard-badge" style="color:{rc['text']};border-color:{rc['border']};background:{rc['bg']};">{rc['label']}</span>
           </div>
           <div class="rcard-body">
             <div class="mc-row">
-              <div class="mc-cell"><div class="mc-key">Phenotype</div><div class="mc-val" style="color:{rc['text']};">{phenotype}</div></div>
-              <div class="mc-cell"><div class="mc-key">Severity</div><div class="mc-val">{severity.title()}</div></div>
-              <div class="mc-cell"><div class="mc-key">Confidence</div><div class="mc-val">{confidence:.0%}</div></div>
-              <div class="mc-cell"><div class="mc-key">Variants</div><div class="mc-val">{len(variants)}</div></div>
+              <div class="mc-cell"><div class="mc-key">Phenotype</div><div class="mc-val" style="color:{rc['text']};">{ph}</div></div>
+              <div class="mc-cell"><div class="mc-key">Severity</div><div class="mc-val">{sev.title()}</div></div>
+              <div class="mc-cell"><div class="mc-key">Confidence</div><div class="mc-val">{conf:.0%}</div></div>
+              <div class="mc-cell"><div class="mc-key">Variants</div><div class="mc-val">{len(var)}</div></div>
             </div>
             <div class="conf-wrap">
-              <div class="conf-header">
-                <span>Prediction confidence</span>
-                <span style="color:{rc['text']};font-weight:500;">{confidence:.0%}</span>
-              </div>
-              <div class="conf-track"><div class="conf-fill" style="width:{confidence*100:.1f}%;background:{rc['dot']};"></div></div>
-            </div>
-        """, unsafe_allow_html=True)
+              <div class="conf-header"><span>Prediction confidence</span><span style="color:{rc['text']};font-weight:500;">{conf:.0%}</span></div>
+              <div class="conf-track"><div class="conf-fill" style="width:{conf*100:.1f}%;background:{rc['dot']};box-shadow:0 0 6px {rc['dot']}66;"></div></div>
+            </div>""", unsafe_allow_html=True)
 
-        if variants:
+        if var:
             rows = ""
-            for v in variants:
-                fc = func_css(v.get("functional_status", ""))
-                fn = (v.get("functional_status") or "unknown").replace("_", " ").title()
-                rows += f"""<tr>
-                  <td class="v-rsid">{v.get('rsid','—')}</td>
+            for v in var:
+                fc = func_css(v.get("functional_status",""))
+                fn = (v.get("functional_status") or "unknown").replace("_"," ").title()
+                rows += f"""<tr><td class="v-rsid">{v.get('rsid','—')}</td>
                   <td class="v-star">{v.get('star_allele','—')}</td>
                   <td>{v.get('ref','?')} → {v.get('alt','?')}</td>
                   <td>{v.get('chrom','—')}:{v.get('pos','—')}</td>
-                  <td class="{fc}">{fn}</td>
-                </tr>"""
-            st.markdown(f"""
-            <hr class="h-rule">
-            <div class="inline-label">Detected Variants ({len(variants)})</div>
-            <table class="vtable">
-              <thead><tr><th>rsID</th><th>Star Allele</th><th>Change</th><th>Position</th><th>Function</th></tr></thead>
-              <tbody>{rows}</tbody>
-            </table>""", unsafe_allow_html=True)
+                  <td class="{fc}">{fn}</td></tr>"""
+            st.markdown(f"""<hr class="h-rule">
+            <div class="inline-label">Detected Variants ({len(var)})</div>
+            <table class="vtable"><thead><tr><th>rsID</th><th>Star Allele</th><th>Change</th><th>Position</th><th>Function</th></tr></thead>
+            <tbody>{rows}</tbody></table>""", unsafe_allow_html=True)
         else:
-            st.markdown("""<div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;
-                 padding:0.5rem 0 0.25rem;letter-spacing:0.04em;">No variants detected — wild-type (*1/*1) assumed</div>""",
-                unsafe_allow_html=True)
+            st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.68rem;color:#9ca3af;padding:0.5rem 0 0.25rem;">No variants detected — wild-type (*1/*1) assumed</div>', unsafe_allow_html=True)
 
-        st.markdown(f"""
-        <hr class="h-rule">
+        st.markdown(f"""<hr class="h-rule">
         <div class="inline-label">CPIC Recommendation</div>
         <div class="rec-box" style="background:{rc['bg']};border-color:{rc['border']};">
-          <div class="rec-label" style="color:{rc['text']};">CPIC Guideline for {drug_name}</div>
+          <div class="rec-label" style="color:{rc['text']};">CPIC Guideline for {dn}</div>
           <div class="rec-text">{rec}</div>
         </div>""", unsafe_allow_html=True)
 
         if alts:
             chips = "".join(f'<span class="alt-chip">{a}</span>' for a in alts)
-            st.markdown(f"""<div class="inline-label">Alternative Drugs</div>
-            <div class="alt-chips" style="margin-bottom:1rem;">{chips}</div>""", unsafe_allow_html=True)
+            st.markdown(f'<div class="inline-label">Alternative Drugs</div><div class="alt-chips" style="margin-bottom:1rem;">{chips}</div>', unsafe_allow_html=True)
 
-        if monitoring:
-            st.markdown(f"""
-            <div style="display:flex;gap:0.75rem;align-items:flex-start;padding:0.875rem;
-                 background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:1rem;">
+        if mon:
+            st.markdown(f"""<div style="display:flex;gap:0.75rem;align-items:flex-start;padding:0.875rem;
+                 background:#0e0e0e;border:1px solid #1e1e1e;border-radius:8px;margin-bottom:1rem;">
               <span style="font-size:0.9rem;">🔬</span>
-              <div>
-                <div class="inline-label" style="margin-bottom:0.25rem;">Monitoring</div>
-                <div style="font-size:0.85rem;color:#b0b0b0;line-height:1.65;">{monitoring}</div>
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-        if exp.get("summary"):
-            model_used = exp.get("model_used", "")
-            is_static  = "static" in model_used.lower()
-            model_label = model_used if model_used else "llama-3.3-70b-versatile"
-            badge_class = "ai-badge-static" if is_static else "ai-badge"
-
-            blocks = ""
-            for lbl, key in [("Summary","summary"),("Biological Mechanism","biological_mechanism"),
-                              ("Variant Significance","variant_significance"),("Clinical Implications","clinical_implications")]:
-                if exp.get(key):
-                    blocks += f"""<div class="ai-section">
-                      <div class="ai-section-label">{lbl}</div>
-                      <div class="ai-section-text">{exp[key]}</div>
-                    </div>"""
-            st.markdown(f"""
-            <div class="ai-block">
-              <div class="ai-header">
-                <span class="{badge_class}">{model_label}</span>
-                <span style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#9ca3af;letter-spacing:0.06em;">
-                  AI Explanation · {drug_name}
-                </span>
-              </div>
-              {blocks}
+              <div><div class="inline-label" style="margin-bottom:0.25rem;">Monitoring</div>
+              <div style="font-size:0.85rem;color:#b0b0b0;line-height:1.65;">{mon}</div></div>
             </div>""", unsafe_allow_html=True)
 
         st.markdown("</div></div>", unsafe_allow_html=True)
 
-        with st.expander(f"Raw JSON — {drug_name}", expanded=False):
-            c1, _ = st.columns([1, 3])
+        # Population frequency bar per card
+        render_population_frequency(gene, ph)
+
+        if exp.get("summary"):
+            is_static   = "static" in exp.get("model_used","").lower()
+            model_label = exp.get("model_used","llama-3.3-70b-versatile")
+            badge_cls   = "ai-badge-static" if is_static else "ai-badge"
+            blocks = ""
+            for lbl, key in [("Summary","summary"),("Biological Mechanism","biological_mechanism"),
+                              ("Variant Significance","variant_significance"),("Clinical Implications","clinical_implications")]:
+                if exp.get(key):
+                    blocks += f'<div class="ai-section"><div class="ai-section-label">{lbl}</div><div class="ai-section-text">{exp[key]}</div></div>'
+            st.markdown(f"""<div class="ai-block">
+              <div class="ai-header"><span class="{badge_cls}">{model_label}</span>
+              <span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#9ca3af;">AI Explanation · {dn}</span></div>
+              {blocks}</div>""", unsafe_allow_html=True)
+
+        with st.expander(f"Raw JSON — {dn}", expanded=False):
+            c1, _ = st.columns([1,3])
             with c1:
                 st.download_button("Download", data=json.dumps(output, indent=2),
-                                   file_name=f"pharmaguard_{pid}_{drug_name}.json",
-                                   mime="application/json", key=f"dl_{pid}_{drug_name}",
-                                   use_container_width=True)
+                                   file_name=f"pharmaguard_{pid}_{dn}.json", mime="application/json",
+                                   key=f"dl_{pid}_{dn}", use_container_width=True)
             st.code(json.dumps(output, indent=2), language="json")
 
 
 # ══════════════════════════════════════════════════════════════
 # NAV
+# ══════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="pg-nav">
   <div class="pg-wordmark">Pharma<em>Guard</em></div>
   <div style="display:flex;gap:0.5rem;align-items:center;">
     <span class="pg-pill">CPIC Aligned</span>
     <span class="pg-pill">RIFT 2026</span>
-    <span class="pg-pill">v4.0</span>
+    <span class="pg-pill pg-pill-hot">v5.0 ★</span>
   </div>
 </div>""", unsafe_allow_html=True)
 
-# Sidebar
 with st.sidebar:
-    st.markdown("""<div style="padding:1rem 0 0.5rem;">
-      <div style="font-family:'DM Mono',monospace;font-size:0.6rem;letter-spacing:0.12em;
-           text-transform:uppercase;color:#9ca3af;margin-bottom:0.5rem;">Groq API Key</div>
-    </div>""", unsafe_allow_html=True)
-    groq_api_key = st.text_input("Groq API Key", value=os.environ.get("GROQ_API_KEY", ""),
+    st.markdown('<div style="padding:1rem 0 0.5rem;"><div style="font-family:DM Mono,monospace;font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;color:#9ca3af;margin-bottom:0.5rem;">Groq API Key</div></div>', unsafe_allow_html=True)
+    groq_api_key = st.text_input("Groq API Key", value=os.environ.get("GROQ_API_KEY",""),
                                   type="password", label_visibility="collapsed", placeholder="gsk_...")
-    st.markdown("""<div style="font-family:'DM Mono',monospace;font-size:0.6rem;color:#9ca3af;
-         padding-bottom:0.5rem;">console.groq.com</div>
-    <div style="font-family:'DM Mono',monospace;font-size:0.58rem;color:#3a3a3a;
-         padding-bottom:1rem;line-height:1.8;">
-      Primary: LLaMA 3.3 70B<br>Fallback: LLaMA 3.1 8B<br>Safety net: static templates
-    </div>
-    <hr style="border:none;border-top:1px solid #1e1e1e;">
-    <div style="padding:0.75rem 0 0.5rem;font-family:'DM Mono',monospace;font-size:0.6rem;
-         letter-spacing:0.12em;text-transform:uppercase;color:#9ca3af;">Gene Map</div>""",
-        unsafe_allow_html=True)
+    st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#3a3a3a;padding-bottom:1rem;line-height:1.8;">Model: LLaMA 3.3 70B<br>Fallback: static expert templates<br>Test mode: instant (no API)</div><hr style="border:none;border-top:1px solid #1e1e1e;"><div style="padding:0.75rem 0 0.5rem;font-family:DM Mono,monospace;font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;color:#9ca3af;">Gene Map</div>', unsafe_allow_html=True)
     for g, drug in [("CYP2D6","Codeine"),("CYP2C19","Clopidogrel"),("CYP2C9","Warfarin"),
                     ("SLCO1B1","Simvastatin"),("TPMT","Azathioprine"),("DPYD","Fluorouracil")]:
-        st.markdown(f"""<div style="font-family:'DM Mono',monospace;font-size:0.68rem;
-             padding:3px 0;color:#374151;">{g} <span style="color:#9ca3af;">→</span> {drug}</div>""",
-            unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.68rem;padding:3px 0;color:#374151;">{g} <span style="color:#9ca3af;">→</span> {drug}</div>', unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["Analysis", "Test Suite"])
 
-# ── TAB 1 ─────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# TAB 1 — ANALYSIS
+# ══════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown("""
-    <div class="steps-row">
+    st.markdown("""<div class="steps-row">
       <div class="step-item active"><div class="step-num">01</div><div class="step-label">Upload VCF</div></div>
       <div class="step-item active"><div class="step-num">02</div><div class="step-label">Select Drugs</div></div>
       <div class="step-item"><div class="step-num">03</div><div class="step-label">Run Analysis</div></div>
       <div class="step-item"><div class="step-num">04</div><div class="step-label">Review Results</div></div>
     </div>""", unsafe_allow_html=True)
 
-    col_l, col_r = st.columns([1.3, 1], gap="large")
-
+    col_l, col_r = st.columns([1.3,1], gap="large")
     with col_l:
         st.markdown('<div class="section-label">Genomic Data</div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Upload VCF file (max 5 MB)", type=["vcf"],
-                                          help="VCF v4.2 with GENE, STAR, FUNCTION INFO tags")
+        uploaded_file = st.file_uploader("Upload VCF file (max 5 MB)", type=["vcf"])
         if uploaded_file:
-            sz = uploaded_file.size / (1024 * 1024)
+            sz = uploaded_file.size / (1024*1024)
             if sz > 5:
-                st.error(f"File too large: {sz:.1f} MB — max 5 MB")
-                uploaded_file = None
+                st.error(f"File too large: {sz:.1f} MB — max 5 MB"); uploaded_file = None
             else:
-                peek = uploaded_file.read(500).decode("utf-8", errors="replace")
-                uploaded_file.seek(0)
+                peek = uploaded_file.read(500).decode("utf-8", errors="replace"); uploaded_file.seek(0)
                 if "##fileformat=VCF" not in peek and "#CHROM" not in peek:
-                    st.error("Invalid VCF file — must be VCF v4.x format")
-                    uploaded_file = None
+                    st.error("Invalid VCF file"); uploaded_file = None
                 else:
                     st.success(f"✓  {uploaded_file.name}  ·  {sz:.2f} MB")
-
-        st.markdown('<div class="section-label" style="margin-top:1rem;">Or use a scenario</div>',
-                    unsafe_allow_html=True)
-        scenario_opts = {
-            "None": None,
-            "Mixed Variants (Standard)": "sample.vcf",
-            "UltraRapid Metabolizer — Codeine Toxic": "test_ultrarapid_metabolizer.vcf",
-            "All Normal Wild-type": "test_all_normal_wildtype.vcf",
-            "Worst Case — All Poor Metabolizers": "test_worst_case_all_pm.vcf",
-        }
+        st.markdown('<div class="section-label" style="margin-top:1rem;">Or use a scenario</div>', unsafe_allow_html=True)
+        scenario_opts = {"None":None,"Mixed Variants (Standard)":"sample.vcf",
+                         "UltraRapid Metabolizer — Codeine Toxic":"test_ultrarapid_metabolizer.vcf",
+                         "All Normal Wild-type":"test_all_normal_wildtype.vcf",
+                         "Worst Case — All Poor Metabolizers":"test_worst_case_all_pm.vcf"}
         chosen_label = st.selectbox("Test Scenario", list(scenario_opts.keys()), label_visibility="collapsed")
         chosen_file  = scenario_opts[chosen_label]
 
     with col_r:
         st.markdown('<div class="section-label">Drugs</div>', unsafe_allow_html=True)
-        drug_multiselect = st.multiselect(
-            "Select drugs", options=ALL_DRUGS, default=["CLOPIDOGREL"],
-            format_func=lambda x: f"{x.title()}  ({GENE_DRUG_MAP.get(x, '')})",
-            label_visibility="collapsed"
-        )
-        st.markdown('<div class="section-label" style="margin-top:0.75rem;">Or type drug names</div>',
-                    unsafe_allow_html=True)
-        custom_drugs = st.text_input("Custom drugs", placeholder="CODEINE, WARFARIN, ...",
-                                      label_visibility="collapsed")
-        st.markdown('<div class="section-label" style="margin-top:0.75rem;">Patient ID</div>',
-                    unsafe_allow_html=True)
-        patient_id_input = st.text_input("Patient ID", placeholder="Auto-generated if blank",
-                                          label_visibility="collapsed")
+        drug_multiselect = st.multiselect("Select drugs", options=ALL_DRUGS, default=["CLOPIDOGREL"],
+            format_func=lambda x: f"{x.title()}  ({GENE_DRUG_MAP.get(x,'')})", label_visibility="collapsed")
+        st.markdown('<div class="section-label" style="margin-top:0.75rem;">Or type drug names</div>', unsafe_allow_html=True)
+        custom_drugs = st.text_input("Custom drugs", placeholder="CODEINE, WARFARIN, ...", label_visibility="collapsed")
+        st.markdown('<div class="section-label" style="margin-top:0.75rem;">Patient ID</div>', unsafe_allow_html=True)
+        patient_id_input = st.text_input("Patient ID", placeholder="Auto-generated if blank", label_visibility="collapsed")
         c1, c2 = st.columns(2)
         with c1: run_interactions = st.checkbox("Check interactions", value=True)
         with c2: generate_pdf    = st.checkbox("Generate PDF", value=True)
+        st.markdown('<div class="section-label" style="margin-top:0.75rem;">View Mode</div>', unsafe_allow_html=True)
+        patient_mode = st.toggle("🧬 → 💬 Patient Plain-English Mode",
+                                  help="Converts clinical jargon into plain language any patient understands")
 
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
     analyze_btn = st.button("Run Analysis →", use_container_width=True)
@@ -509,200 +774,140 @@ with tab1:
         if custom_drugs.strip():
             all_drugs += [d.strip().upper() for d in custom_drugs.split(",") if d.strip()]
         all_drugs = list(set(all_drugs))
-
-        if not all_drugs:
-            st.error("Select at least one drug.")
-            st.stop()
+        if not all_drugs: st.error("Select at least one drug."); st.stop()
 
         vcf_content = None
-        if uploaded_file:
-            vcf_content = uploaded_file.read().decode("utf-8", errors="replace")
-        elif chosen_file:
-            vcf_content = load_vcf_file(chosen_file)
-        else:
-            st.error("Upload a VCF file or select a test scenario.")
-            st.stop()
+        if uploaded_file:    vcf_content = uploaded_file.read().decode("utf-8", errors="replace")
+        elif chosen_file:    vcf_content = load_vcf_file(chosen_file)
+        else:                st.error("Upload a VCF file or select a test scenario."); st.stop()
 
         pid = patient_id_input.strip() or f"PG-{str(uuid.uuid4())[:8].upper()}"
-
-        st.markdown(f"""
-        <div style="display:flex;align-items:baseline;gap:1rem;margin:2.5rem 0 1.5rem;
-             padding-bottom:1rem;border-bottom:1px solid #e5e7eb;">
-          <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;
-               letter-spacing:-0.02em;">Results</div>
+        pm_badge = '<span style="font-family:DM Mono,monospace;font-size:0.6rem;background:#7c3aed18;border:1px solid #7c3aed;color:#a78bfa;padding:3px 10px;border-radius:100px;">Patient Mode</span>' if patient_mode else ""
+        st.markdown(f"""<div style="display:flex;align-items:baseline;gap:1rem;margin:2.5rem 0 1.5rem;padding-bottom:1rem;border-bottom:1px solid #1e1e1e;">
+          <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;letter-spacing:-0.02em;">Results</div>
           <div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#9ca3af;">{pid}</div>
-        </div>""", unsafe_allow_html=True)
+          {pm_badge}</div>""", unsafe_allow_html=True)
 
         with st.spinner("Analysing…"):
             parsed_vcf, risk_results, all_outputs, ix_report, pdf_bytes = run_pipeline(
-                vcf_content, all_drugs, pid, groq_api_key, run_interactions, generate_pdf
-            )
+                vcf_content, all_drugs, pid, groq_api_key, run_interactions, generate_pdf)
 
-        render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid)
+        render_results(all_outputs, parsed_vcf, ix_report, pdf_bytes, pid, patient_mode=patient_mode)
 
         with st.expander("VCF Parse Details", expanded=False):
             p1, p2, p3 = st.columns(3)
             p1.metric("Total Variants", parsed_vcf["total_variants"])
-            p2.metric("Genes Found", len(parsed_vcf["detected_genes"]))
-            p3.metric("Parse Errors", len(parsed_vcf["parse_errors"]))
-            for err in parsed_vcf.get("parse_errors", []):
-                st.error(err)
+            p2.metric("Genes Found",    len(parsed_vcf["detected_genes"]))
+            p3.metric("Parse Errors",   len(parsed_vcf["parse_errors"]))
     else:
-        st.markdown("""
-        <div class="empty">
+        st.markdown("""<div class="empty">
           <div class="empty-icon">⬡</div>
           <div class="empty-title">Ready for analysis</div>
           <div class="empty-hint">
             Upload a VCF · select drugs · run<br>
-            CYP2D6 · CYP2C19 · CYP2C9 · SLCO1B1 · TPMT · DPYD
+            CYP2D6 · CYP2C19 · CYP2C9 · SLCO1B1 · TPMT · DPYD<br><br>
+            v5.0 → Heatmap · Polygenic Score · Patient Mode · Chromosome Viz · Population Frequency
           </div>
         </div>""", unsafe_allow_html=True)
 
 
-# ── TAB 2: TEST SUITE ──────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# TAB 2 — TEST SUITE (parallel)
+# ══════════════════════════════════════════════════════════════
 TEST_SUITE = [
-    {"name":"Mixed Variants","file":"sample.vcf","icon":"⬡",
+    {"name":"Mixed Variants","file":"sample.vcf",
      "drugs":["CLOPIDOGREL","CODEINE","AZATHIOPRINE"],
-     "expected":{"CLOPIDOGREL":"Ineffective","CODEINE":"Adjust Dosage","AZATHIOPRINE":"Adjust Dosage"},
-     "desc":"CYP2C19 *2/*3 · CYP2D6 *4/*1 · TPMT *3B/*1"},
-    {"name":"UltraRapid Metabolizer","file":"test_ultrarapid_metabolizer.vcf","icon":"⬡",
+     "expected":{"CLOPIDOGREL":"Ineffective","CODEINE":"Ineffective","AZATHIOPRINE":"Toxic"},
+     "desc":"CYP2C19 *2/*3 · CYP2D6 *4/*4 · TPMT *3B/*3C"},
+    {"name":"UltraRapid Metabolizer","file":"test_ultrarapid_metabolizer.vcf",
      "drugs":["CODEINE","CLOPIDOGREL"],
      "expected":{"CODEINE":"Toxic","CLOPIDOGREL":"Safe"},
      "desc":"CYP2D6 *1xN/*1xN → URM → Codeine Toxic"},
-    {"name":"All Normal Wild-type","file":"test_all_normal_wildtype.vcf","icon":"⬡",
+    {"name":"All Normal Wild-type","file":"test_all_normal_wildtype.vcf",
      "drugs":ALL_DRUGS,
      "expected":{d:"Safe" for d in ALL_DRUGS},
      "desc":"Wild-type *1/*1 across all 6 genes"},
-    {"name":"Worst Case — All PM","file":"test_worst_case_all_pm.vcf","icon":"⬡",
+    {"name":"Worst Case — All PM","file":"test_worst_case_all_pm.vcf",
      "drugs":ALL_DRUGS,
      "expected":{"CODEINE":"Ineffective","CLOPIDOGREL":"Ineffective","WARFARIN":"Adjust Dosage",
                  "SIMVASTATIN":"Toxic","AZATHIOPRINE":"Toxic","FLUOROURACIL":"Toxic"},
      "desc":"Loss-of-function alleles across all 6 genes"},
 ]
-
 RISK_DOT = {"Safe":"#22c55e","Adjust Dosage":"#f59e0b","Toxic":"#ef4444","Ineffective":"#8b5cf6","Unknown":"#9ca3af"}
 
 with tab2:
-    st.markdown("""
-    <div style="margin-bottom:2rem;">
-      <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;
-           letter-spacing:-0.02em;margin-bottom:0.4rem;">Test Suite</div>
-      <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:#9ca3af;letter-spacing:0.06em;">
-        4 scenarios · expected vs actual · pass / fail per drug
-      </div>
+    st.markdown("""<div style="margin-bottom:2rem;">
+      <div style="font-family:'Instrument Serif',serif;font-size:1.75rem;color:#f0f0f0;letter-spacing:-0.02em;margin-bottom:0.4rem;">Test Suite</div>
+      <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:#9ca3af;letter-spacing:0.06em;">4 scenarios · parallel execution · pass/fail per drug</div>
     </div>""", unsafe_allow_html=True)
 
     pc = st.columns(4)
     for i, sc in enumerate(TEST_SUITE):
         with pc[i]:
-            rows_html = ""
-            for d, r in list(sc["expected"].items())[:4]:
-                color = RISK_DOT.get(r, "#9ca3af")
-                rows_html += f"""<div class="test-row">
-                  <span class="test-drug">{d[:9]}</span>
-                  <span class="test-result" style="color:{color};">{r}</span>
-                </div>"""
-            st.markdown(f"""<div class="test-card">
-              <div class="test-name">{sc['name']}</div>
-              <div class="test-desc">{sc['desc']}</div>
-              {rows_html}
-            </div>""", unsafe_allow_html=True)
+            rh = "".join(f'<div class="test-row"><span class="test-drug">{d[:9]}</span><span class="test-result" style="color:{RISK_DOT.get(r,"#9ca3af")};">{r}</span></div>' for d,r in list(sc["expected"].items())[:4])
+            st.markdown(f'<div class="test-card"><div class="test-name">{sc["name"]}</div><div class="test-desc">{sc["desc"]}</div>{rh}</div>', unsafe_allow_html=True)
 
     st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
-    tc1, tc2 = st.columns([3, 1])
-    with tc1:
-        use_llm = st.checkbox("Include LLM Explanations (~30s slower, uses Groq API)", value=False)
-    with tc2:
-        run_all = st.button("Run All 4 Tests →", use_container_width=True)
+    tc1, tc2 = st.columns([3,1])
+    with tc1: use_llm = st.checkbox("Include LLM Explanations (uses Groq API)", value=False)
+    with tc2: run_all = st.button("Run All 4 Tests →", use_container_width=True)
 
     if run_all:
-        passed, failed = 0, 0
-        suite_results  = []
-        for sc in TEST_SUITE:
+        def run_one(sc):
             vcf = load_vcf_file(sc["file"])
             pid = f"TEST-{sc['name'][:6].replace(' ','').upper()}"
-            key = groq_api_key if use_llm else ""
-            with st.spinner(f"Running: {sc['name']}…"):
-                pv, _, ao, _, _ = run_pipeline(vcf, sc["drugs"], pid, key, run_ix=False, gen_pdf=False)
-            rows, sc_pass = [], True
+            pv, _, ao, _, _ = run_pipeline(vcf, sc["drugs"], pid,
+                groq_api_key if use_llm else "", run_ix=False, gen_pdf=False, skip_llm=not use_llm)
+            rows, ok = [], True
             for out in ao:
-                drug  = out["drug"]
-                got   = out["risk_assessment"]["risk_label"]
-                exp   = sc["expected"].get(drug, "")
-                ok    = (got == exp) if exp else True
-                pheno = out["pharmacogenomic_profile"]["phenotype"]
-                diplo = out["pharmacogenomic_profile"]["diplotype"]
-                rows.append((drug, got, exp, ok, pheno, diplo))
-                if not ok: sc_pass = False
-            if sc_pass: passed += 1
-            else:       failed += 1
-            suite_results.append({"name": sc["name"], "pass": sc_pass, "rows": rows,
-                                   "outputs": ao, "file": sc["file"]})
+                drug=out["drug"]; got=out["risk_assessment"]["risk_label"]
+                exp=sc["expected"].get(drug,""); passed=(got==exp) if exp else True
+                ph=out["pharmacogenomic_profile"]["phenotype"]; dp=out["pharmacogenomic_profile"]["diplotype"]
+                rows.append((drug,got,exp,passed,ph,dp))
+                if not passed: ok=False
+            return {"name":sc["name"],"pass":ok,"rows":rows,"outputs":ao,"file":sc["file"]}
 
-        total    = passed + failed
-        ok_color = "#16a34a" if failed == 0 else "#b45309"
-        ok_bg    = "#f0fdf4" if failed == 0 else "#fffbeb"
-        ok_bdr   = "#bbf7d0" if failed == 0 else "#fde68a"
-        st.markdown(f"""
-        <div style="background:{ok_bg};border:1px solid {ok_bdr};border-radius:10px;
-             padding:1.25rem 1.5rem;margin:1.25rem 0;display:flex;align-items:center;justify-content:space-between;">
-          <div style="font-family:'Instrument Serif',serif;font-size:1.4rem;color:{ok_color};">
-            {'All tests passed' if failed==0 else f'{passed}/{total} tests passed'}
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:{ok_color};letter-spacing:0.06em;">
-            {passed} passed · {failed} failed · {int(passed/total*100)}%
-          </div>
+        box = st.empty(); box.info("Running all 4 scenarios in parallel…")
+        results = [None]*4
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futs = {ex.submit(run_one,sc):i for i,sc in enumerate(TEST_SUITE)}
+            done = 0
+            for f in as_completed(futs):
+                results[futs[f]] = f.result(); done += 1
+                box.info(f"Completed {done}/4 scenarios…")
+        box.empty()
+
+        passed = sum(1 for r in results if r["pass"]); failed = 4-passed
+        oc = "#16a34a" if failed==0 else "#b45309"; ob = "#f0fdf4" if failed==0 else "#fffbeb"; od = "#bbf7d0" if failed==0 else "#fde68a"
+        st.markdown(f"""<div style="background:{ob};border:1px solid {od};border-radius:10px;padding:1.25rem 1.5rem;margin:1.25rem 0;display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-family:'Instrument Serif',serif;font-size:1.4rem;color:{oc};">{'✨ All tests passed' if failed==0 else f'{passed}/4 tests passed'}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:{oc};">{passed} passed · {failed} failed · {int(passed/4*100)}%</div>
         </div>""", unsafe_allow_html=True)
 
-        for sr in suite_results:
+        for sr in results:
             sym = "✓" if sr["pass"] else "✕"
             with st.expander(f"{sym}  {sr['name']}  —  {'PASS' if sr['pass'] else 'FAIL'}", expanded=not sr["pass"]):
-                rows_html = ""
-                for drug, got, exp, ok, pheno, diplo in sr["rows"]:
-                    rc    = RISK_CONFIG.get(got, RISK_CONFIG["Unknown"])
-                    ok_c  = "#16a34a" if ok else "#dc2626"
-                    ok_bg2 = "#f0fdf4" if ok else "#fef2f2"
-                    rows_html += f"""<div class="rt-row">
+                rh = ""
+                for drug,got,exp,ok,ph,dp in sr["rows"]:
+                    rc=RISK_CONFIG.get(got,RISK_CONFIG["Unknown"]); oc2="#16a34a" if ok else "#dc2626"; ob2="#f0fdf4" if ok else "#fef2f2"
+                    rh += f"""<div class="rt-row">
                       <div class="rt-cell" style="font-weight:600;color:#e0e0e0;">{drug}</div>
-                      <div class="rt-cell"><span style="display:inline-flex;align-items:center;gap:6px;">
-                        <span style="width:6px;height:6px;border-radius:50%;background:{rc['dot']};flex-shrink:0;"></span>{got}
-                      </span></div>
+                      <div class="rt-cell"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:6px;height:6px;border-radius:50%;background:{rc['dot']};flex-shrink:0;"></span>{got}</span></div>
                       <div class="rt-cell" style="color:#9ca3af;">{exp or '—'}</div>
-                      <div class="rt-cell" style="color:#6b7280;">{diplo} / {pheno}</div>
-                      <div class="rt-cell" style="justify-content:center;background:{ok_bg2};color:{ok_c};font-weight:700;">{sym}</div>
+                      <div class="rt-cell" style="color:#6b7280;">{dp} / {ph}</div>
+                      <div class="rt-cell" style="justify-content:center;background:{ob2};color:{oc2};font-weight:700;">{sym}</div>
                     </div>"""
-                st.markdown(f"""<div class="rt-wrap">
-                  <div class="rt-head">
-                    <div class="rt-hcell">Drug</div><div class="rt-hcell">Result</div>
-                    <div class="rt-hcell">Expected</div><div class="rt-hcell">Diplotype / Phenotype</div>
-                    <div class="rt-hcell"></div>
-                  </div>{rows_html}</div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="rt-wrap"><div class="rt-head">
+                  <div class="rt-hcell">Drug</div><div class="rt-hcell">Result</div>
+                  <div class="rt-hcell">Expected</div><div class="rt-hcell">Diplotype / Phenotype</div>
+                  <div class="rt-hcell"></div></div>{rh}</div>""", unsafe_allow_html=True)
+                d1,d2=st.columns(2)
+                with d1: st.download_button("Download JSON",data=json.dumps(sr["outputs"],indent=2),file_name=f"test_{sr['file'].replace('.vcf','')}.json",mime="application/json",key=f"tsc_{sr['name'][:14]}",use_container_width=True)
+                with d2: st.download_button("Download VCF",data=load_vcf_file(sr["file"]),file_name=sr["file"],mime="text/plain",key=f"vcf_{sr['name'][:14]}",use_container_width=True)
 
-                d1, d2 = st.columns(2)
-                with d1:
-                    st.download_button("Download JSON", data=json.dumps(sr["outputs"], indent=2),
-                                       file_name=f"test_{sr['file'].replace('.vcf','')}.json",
-                                       mime="application/json", key=f"tsc_{sr['name'][:14]}",
-                                       use_container_width=True)
-                with d2:
-                    st.download_button("Download VCF", data=load_vcf_file(sr["file"]),
-                                       file_name=sr["file"], mime="text/plain",
-                                       key=f"vcf_{sr['name'][:14]}", use_container_width=True)
-
-        st.download_button(
-            "Download Full Test Suite JSON",
-            data=json.dumps([{"scenario": s["name"], "pass": s["pass"], "results": s["outputs"]}
-                             for s in suite_results], indent=2),
+        st.download_button("Download Full Test Suite JSON",
+            data=json.dumps([{"scenario":s["name"],"pass":s["pass"],"results":s["outputs"]} for s in results],indent=2),
             file_name=f"pharmaguard_tests_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-            mime="application/json", use_container_width=True
-        )
+            mime="application/json", use_container_width=True)
     else:
-        st.markdown("""
-        <div class="empty">
-          <div class="empty-icon">▷</div>
-          <div class="empty-title">One-click validation</div>
-          <div class="empty-hint">
-            4 scenarios · expected vs actual · pass/fail per drug<br>
-            Mixed · UltraRapid · All Normal · Worst Case
-          </div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown('<div class="empty"><div class="empty-icon">▷</div><div class="empty-title">One-click validation</div><div class="empty-hint">4 scenarios · parallel execution · pass/fail per drug<br>Mixed · UltraRapid · All Normal · Worst Case</div></div>', unsafe_allow_html=True)
